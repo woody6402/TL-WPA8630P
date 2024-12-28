@@ -1,1 +1,15 @@
+{
+  "domain": "tplink_wpa4220",
+  "name": "TP-Link WPA4220",
+  "version": "1.0.0",
+  "documentation": "https://www.home-assistant.io/integrations/tplink_wpa4220",
+  "requirements": [
+    "requests",
+    "pycryptodome"
+  ],
+  "dependencies": [],
+  "codeowners": ["@woody6402"],
+  "iot_class": "local_polling",
+  "config_flow": true
+}
 
