@@ -1,6 +1,6 @@
 # TL-WPA8630P
 
-Status: Very early Draft
+Status: Very early Draft, currently only as template for individual forks
 
 Home Assistant Device Integration for TP-LINK powerline device WPA8630
 - Works with:
