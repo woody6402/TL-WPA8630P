@@ -1,5 +1,6 @@
 from homeassistant.helpers.entity import Entity
 from datetime import timedelta
+import asyncio
 
 from .const import DOMAIN
 
@@ -9,7 +10,7 @@ from .TL_WPA4220 import TL_WPA4220
 
 _LOGGER = logging.getLogger(__name__)
 
-SCAN_INTERVAL = timedelta(minutes=3)
+SCAN_INTERVAL = timedelta(minutes=1)
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
     """Set up the TP-Link WPA4220 sensor."""
@@ -51,10 +52,16 @@ class TPLinkStatusSensor(Entity):
             
             await self._hass.async_add_executor_job(device.login, self._password)
             _LOGGER.debug("Fetching data...")
-            fw = await self._hass.async_add_executor_job(device.get_firmware_info)
-            plc = await self._hass.async_add_executor_job(device.get_plc_device_status)
-            wls = await self._hass.async_add_executor_job(device.get_wlan_status)
-            wic = await self._hass.async_add_executor_job(device.get_wifi_clients)
+
+            # Asynchronous calls with `asyncio.gather`
+            fw, plc, wls, wic = await asyncio.gather(
+               self._hass.async_add_executor_job(device.get_firmware_info),
+               self._hass.async_add_executor_job(device.get_plc_device_status),
+               self._hass.async_add_executor_job(device.get_wlan_status),
+               self._hass.async_add_executor_job(device.get_wifi_clients)
+            )
+            wls['wireless_2g_pwd'] = "xxx"
+            wls['wireless_5g_pwd'] = "xxx"
         except Exception as e:
             self._state = "error"
             self._attributes = {"error": str(e)}
