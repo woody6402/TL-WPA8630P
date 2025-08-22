@@ -8,4 +8,9 @@ Home Assistant Device Integration for TP-LINK powerline device WPA8630
   -  Python code adapted and derived from TL-WPA4220 (so maybe this device type is als working)
     - see: https://github.com/3v1n0/TL-WPA4220-python    
 -  since blocking call were used in python library calls _hass.async_add_executor_job was used to capsulate them
--  since devices only allow one time login the login/retrieve/logout sequence is done for each sensor data retrieve 
+-  since devices only allow one time login the login/retrieve/logout sequence is done for each sensor data retrieve
+
+# Changes
+
+- add device info: v0.91
+- minor bugs: v0.91
