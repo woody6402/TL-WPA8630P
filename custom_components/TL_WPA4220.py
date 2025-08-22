@@ -112,7 +112,7 @@ class TL_WPA4220(object):
     def logout(self):
         self._require_login()
         old_timeout = self._timeout
-        self._timeout = 0.1 # Do not block in this case...
+        self._timeout = 2.0 # Do not block in this case...
         self._encrypted_req('admin/logout.htm', self.Op.WRITE, extra_headers={
             'Cookie': 'Authorization=;path=/'
         })
