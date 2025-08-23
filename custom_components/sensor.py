@@ -1,549 +1,336 @@
-from homeassistant.helpers.entity import Entity
+import logging
+from datetime import timedelta
+
 from homeassistant.components.sensor import SensorEntity
-from homeassistant.helpers import device_registry as dr
-from homeassistant.const import UnitOfDataRate
-from homeassistant.core import callback  # optional, aber schön für Callbacks
-from homeassistant.components.binary_sensor import BinarySensorEntity, BinarySensorDeviceClass
-
-PLC_DEGRADED_THRESHOLD = 100  # Mbit/s
-
-from datetime import timedelta, datetime
-import asyncio
+from homeassistant.const import CONF_USERNAME, CONF_PASSWORD, CONF_HOST
 from homeassistant.helpers.event import async_track_time_interval
 
 from .const import DOMAIN
-
-import logging
-import re
-
-from .TL_WPA4220 import TL_WPA4220
-
-from homeassistant.helpers.dispatcher import (
-    async_dispatcher_connect,
-    async_dispatcher_send,
-)
-
-SIGNAL_WPA4220_UPDATED = "tplink_wpa4220_updated_{ip}"
-
+from .technicolor_cga import TechnicolorCGA
 
 _LOGGER = logging.getLogger(__name__)
 
-SCAN_INTERVAL = timedelta(minutes=1)
+SCAN_INTERVAL = timedelta(seconds=300)
+
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
-    """Set up the TP-Link WPA4220 sensor."""
-    #device = hass.data[DOMAIN]
-    
-    ip = config_entry.data["ip_address"]
-    pwd = config_entry.data["password"]
-    shared = {"status": None}  # kleiner gemeinsamer Speicher    
+    """Set up the Technicolor CGA sensor from a config entry."""
+    _LOGGER.debug("Setting up Technicolor CGA sensor")
 
-    main = TPLinkStatusSensor(hass, "TP-Link WPA4220 Status", ip, pwd, config_entry, shared)
-    
-    async_add_entities([main,
-        WifiClientsTotalSensor(hass, "WLAN Clients (gesamt)", ip, config_entry, shared),
-        WifiClients24Sensor(hass, "WLAN Clients 2.4 GHz", ip, config_entry, shared),
-        WifiClients5Sensor(hass, "WLAN Clients 5 GHz", ip, config_entry, shared),
-        PlcMaxRxRateSensor(hass, "PLC Max RX (Mbit/s)", ip, config_entry, shared),
-        PlcMaxTxRateSensor(hass, "PLC Max TX (Mbit/s)", ip, config_entry, shared),
-        WifiChannel24Sensor(hass, "WLAN Kanal 2.4 GHz", ip, config_entry, shared),
-        WifiChannel5Sensor(hass, "WLAN Kanal 5 GHz", ip, config_entry, shared),
-        
-    WifiSsid24Sensor(hass, "SSID 2.4 GHz", ip, config_entry, shared),
-    WifiSsid5Sensor(hass, "SSID 5 GHz", ip, config_entry, shared),
-    WifiChannel24Sensor(hass, "Kanal 2.4 GHz", ip, config_entry, shared),
-    WifiChannel5Sensor(hass, "Kanal 5 GHz", ip, config_entry, shared),
-    Wifi24EnabledBinary(hass, "WLAN 2.4 GHz aktiv", ip, config_entry, shared),
-    Wifi5EnabledBinary(hass, "WLAN 5 GHz aktiv", ip, config_entry, shared),
-    PlcPeersCountSensor(hass, "PLC Peers (Anzahl)", ip, config_entry, shared),
-    PlcMinRxRateSensor(hass, "PLC min RX (Mbit/s)", ip, config_entry, shared),
-    PlcMinTxRateSensor(hass, "PLC min TX (Mbit/s)", ip, config_entry, shared),
-    # optional:
-    PlcDegradedBinary(hass, f"PLC unter {PLC_DEGRADED_THRESHOLD} Mbit/s?", ip, config_entry, shared),
-    WifiClientsWithIpSensor(hass, "WLAN Clients mit IP", ip, config_entry, shared),
-        
-        
-    ],  update_before_add=True)
+    username = config_entry.data[CONF_USERNAME]
+    password = config_entry.data[CONF_PASSWORD]
+    host = config_entry.data[CONF_HOST]
 
-    # Rufe die async_update-Funktion im festgelegten Intervall auf
-    # async_track_time_interval(hass, sensor.async_update, SCAN_INTERVAL)
+    try:
+        technicolor_cga = TechnicolorCGA(username, password, host)
+        await hass.async_add_executor_job(technicolor_cga.login)
+    except Exception as e:
+        _LOGGER.error(f"Failed to log in to Technicolor CGA: {e}")
+        return
 
-class TPLinkStatusSensor(SensorEntity):
-    """Sensor to retrieve the full status of the TP-Link WPA4220 device."""
-    
-    _attr_should_poll = True   # <— hinzufügen
-    # optional: kleines Icon
-    _attr_icon = "mdi:access-point"
+    sensors = []
 
-    def __init__(self, hass, name, ip, password,config_entry,shared):
-        self._ip = ip
-        self._name = name
+    # Add system sensor
+    try:
+        system_data = await hass.async_add_executor_job(technicolor_cga.system)
+        sensors.append(
+            TechnicolorCGASystemSensor(
+                technicolor_cga,
+                hass,
+                config_entry.entry_id,
+                host,
+                "Technicolor CGA System Status",
+                system_data,
+            )
+        )
+    except Exception as e:
+        _LOGGER.error(f"Failed to fetch system data from Technicolor CGA: {e}")
+
+    # Add DHCP sensors
+    try:
+        dhcp_data = await hass.async_add_executor_job(technicolor_cga.dhcp)
+        for key in dhcp_data.keys():
+            sensors.append(
+                TechnicolorCGADHCPSensor(
+                    technicolor_cga,
+                    hass,
+                    config_entry.entry_id,
+                    host,
+                    f"Technicolor CGA DHCP {key}",
+                    key,
+                )
+            )
+    except Exception as e:
+        _LOGGER.error(f"Failed to fetch DHCP data from Technicolor CGA: {e}")
+
+    # Add host sensor
+    try:
+        sensors.append(
+            TechnicolorCGAHostSensor(
+                technicolor_cga,
+                hass,
+                config_entry.entry_id,
+                host,
+                "Technicolor CGA Host List",
+            )
+        )
+    except Exception as e:
+        _LOGGER.error(f"Failed to fetch host data from Technicolor CGA: {e}")
+
+    # Delta sensor for missing devices
+    try:
+        sensors.append(
+            TechnicolorCGAHostDeltaSensor(
+                technicolor_cga,
+                hass,
+                config_entry.entry_id,
+                host,
+                "Technicolor CGA Missing Devices",
+            )
+        )
+    except Exception as e:
+        _LOGGER.error(f"Failed to create Delta sensor: {e}")
+
+    async_add_entities(sensors, True)
+    _LOGGER.debug("Technicolor CGA sensors added (with device_info)")
+
+    # Call async_update at a fixed interval
+    for sensor in sensors:
+        async_track_time_interval(hass, sensor.async_update, SCAN_INTERVAL)
+
+    # Also perform a bulk refresh on the same schedule (kept from original behavior)
+    async_track_time_interval(
+        hass, lambda _: [sensor.async_update() for sensor in sensors], SCAN_INTERVAL
+    )
+
+
+class TechnicolorCGABaseSensor(SensorEntity):
+    """Base class for Technicolor CGA sensors with device_info."""
+
+    def __init__(self, technicolor_cga, hass, config_entry_id, host, name):
+        """Initialize the sensor."""
+        self.technicolor_cga = technicolor_cga
+        self.hass = hass
+        self._config_entry_id = config_entry_id
+        self._host = host
+        self._attr_name = name
         self._state = None
         self._attributes = {}
-        self._hass = hass
-        self._password = password
-        self._config_entry = config_entry
-        self._shared = shared
+        # Optional fields that the system sensor may fill later
+        self._model = None
+        self._sw_version = None
+        _LOGGER.debug(f"{name} Sensor initialized (host: {host})")
 
+    @property
+    def unique_id(self):
+        """Return a unique ID."""
+        return f"{self._config_entry_id}_{self._attr_name.replace(' ', '_').lower()}"
 
     @property
     def name(self):
-        return self._name
+        """Return the name of the sensor."""
+        return self._attr_name
 
     @property
     def state(self):
+        """Return the state of the sensor."""
         return self._state
 
     @property
     def extra_state_attributes(self):
+        """Return the state attributes of the sensor."""
         return self._attributes
-    
-    @property
-    def unique_id(self):
-        return f"tplink_wpa4220_{self._ip}"
-        
-    @property
-    def device_info(self):
-           
-        return {
-            "identifiers": {("tplink_wpa4220", self._ip)},  # eindeutige ID
-            "name": "TP-Link WPA4220",
-            "manufacturer": "TP-Link",
-            "model": "WPA4220", 
-        }        
-
-
-    async def async_update(self):
-        
-        device=None
-                
-        try:
-            device = TL_WPA4220(self._ip)
-            _LOGGER.debug(f"Logging in to the device... {self._password}")
-            
-            await self._hass.async_add_executor_job(device.login, self._password)
-            _LOGGER.debug("Fetching data...")
-
-            # Asynchronous calls with `asyncio.gather`
-            fw_data, plc_list, wls_data, wic_list = await asyncio.gather(
-               self._hass.async_add_executor_job(device.get_firmware_info),
-               self._hass.async_add_executor_job(device.get_plc_device_status),
-               self._hass.async_add_executor_job(device.get_wlan_status),
-               self._hass.async_add_executor_job(device.get_wifi_clients)
-            )
-            
-            # Passwort maskieren und aktuelle Zeit ergänzen
-            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            wls_data['wireless_2g_pwd'] = f"hidden ({now_str})"
-            wls_data['wireless_5g_pwd'] = f"hidden ({now_str})"
-
-         
-        except Exception as e:
-            self._state = "error"
-            self._attributes = {"error": str(e)}
-            _LOGGER.error(f"An error occurred during data retrieval: {e}")
-        else:
-            status = {
-                "FirmwareInfo": fw_data,
-                "WlanStatus": wls_data,
-                "WifiClients": wic_list,
-                "PlcDeviceStatus": plc_list
-            }
-            self._state = "connected"
-            self._attributes = status
-            self._shared["status"] = status
-            
-            async_dispatcher_send(self._hass, SIGNAL_WPA4220_UPDATED.format(ip=self._ip))
-            
-            _LOGGER.debug(f"Updated state: {self._state}, attributes: {self._attributes}")
-          
-            
-            # --- Device-Register-Update JETZT, mit den frischen Variablen ---
-            try:
-                def _norm(mac):
-                    if not mac:
-                        return None
-                    return mac.strip().lower().replace("-", ":")
-
-                # 2.4G/5G MACs aus den frischen Daten
-                mac_24 = _norm((wls_data or {}).get("wireless_2g_macaddr"))
-                mac_5  = _norm((wls_data or {}).get("wireless_5g_macaddr"))
-
-                # nur die beiden WLAN-MACs setzen
-                conn_set = {("mac", m) for m in (mac_24, mac_5) if m}
-
-                #_LOGGER.debug(f"Mac; {conn_set}")
-                device_registry = dr.async_get(self._hass)
-
-                dev = device_registry.async_get_or_create(
-                    config_entry_id=self._config_entry.entry_id,
-                    identifiers={("tplink_wpa4220", self._ip)},
-                    manufacturer="TP-Link",
-                    name="TP-Link WPA4220",
-                    connections=conn_set if conn_set else None,
-                )
-
-                device_registry.async_update_device(
-                    device_id=dev.id,
-                    model=fw_data.get("model") or "WPA4220",
-                    sw_version=fw_data.get("firmware_version"),
-                    hw_version=fw_data.get("hardware_version"),
-                )
-                
-                dev_after = device_registry.async_get_device(identifiers={("tplink_wpa4220", self._ip)})
-                _LOGGER.debug(
-                    f"DR check -> connections={getattr(dev_after, 'connections', None)}, "
-                    f"model={getattr(dev_after, 'model', None)}, sw={getattr(dev_after, 'sw_version', None)}, "
-                    f"hw={getattr(dev_after, 'hw_version', None)}"
-                )
-
-            except Exception as reg_err:
-                _LOGGER.debug(f"Device registry MAC/version update skipped/failed: {reg_err}")
-            # --- Ende Device-Register-Update ---
-                    
-            
-            
-        finally:
-            try:
-                _LOGGER.debug("Logging out from the device...")
-                if device:
-                    await self._hass.async_add_executor_job(device.logout)
-                device = None
-                _LOGGER.debug("Logout successful.")
-            except Exception as logout_error:
-                _LOGGER.error(f"An error occurred during logout: {logout_error} - {device}")
-
-class _DerivedBinaryBase(BinarySensorEntity):
-    _attr_should_poll = False
-
-    def __init__(self, hass, name, ip, config_entry, shared):
-        self._hass = hass
-        self._name = name
-        self._ip = ip
-        self._config_entry = config_entry
-        self._shared = shared
-        self._is_on = None
-        self._unsub = None
-
-    @property
-    def name(self): return self._name
-
-    @property
-    def unique_id(self):
-        return f"{self._config_entry.entry_id}_{self._ip}_{self.__class__.__name__.lower()}"
 
     @property
     def device_info(self):
-        return {
-            "identifiers": {("tplink_wpa4220", self._ip)},
-            "name": "TP-Link WPA4220",
-            "manufacturer": "TP-Link",
-            "model": "WPA4220",
+        """Return device registry information for the Technicolor gateway.
+
+        Keeping it simple: identifiers by (DOMAIN, host), a friendly name,
+        manufacturer, and a configuration URL.
+        The system sensor may enrich model and sw_version after its first fetch.
+        """
+        info = {
+            "identifiers": {(DOMAIN, self._host)},
+            "name": "Technicolor CGA Gateway",
+            "manufacturer": "Technicolor",
+            "configuration_url": f"http://{self._host}/",
         }
-
-    @property
-    def is_on(self):
-        return self._is_on
-
-    @callback
-    def _handle_push(self) -> None:
-        self.schedule_update_ha_state(True)
-
-    async def async_added_to_hass(self) -> None:
-        # JETZT ist self.hass garantiert gesetzt
-        self._unsub = async_dispatcher_connect(
-            self.hass,
-            SIGNAL_WPA4220_UPDATED.format(ip=self._ip),
-            self._handle_push,
-        )
-        # automatisch beim Entfernen deregistrieren
-        self.async_on_remove(self._unsub)
-        # einmal initial updaten, falls wir das erste Signal verpasst haben
-        self.async_schedule_update_ha_state(True)        
+        if self._model:
+            info["model"] = self._model
+        if self._sw_version:
+            info["sw_version"] = self._sw_version
+        return info
 
     async def async_update(self):
-        status = self._shared.get("status") or {}
-        self._compute_on(status)
-
-    async def async_will_remove_from_hass(self) -> None:
-        if getattr(self, "_unsub", None):
-            self._unsub()
-        self._unsub = None
-
-    def _compute_on(self, status: dict):
-        raise NotImplementedError
+        """Fetch new state data for the sensor."""
+        raise NotImplementedError("Subclasses must implement async_update")
 
 
+class TechnicolorCGASystemSensor(TechnicolorCGABaseSensor):
+    """System sensor for Technicolor CGA."""
 
-class _DerivedBase(SensorEntity):
-    _attr_should_poll = False   # nicht pollen
-    
-    def __init__(self, hass, name, ip, config_entry, shared):
-        self._hass = hass
-        self._name = name
-        self._ip = ip
-        self._config_entry = config_entry
-        self._shared = shared
+    def __init__(self, technicolor_cga, hass, config_entry_id, host, name, system_data):
+        super().__init__(technicolor_cga, hass, config_entry_id, host, name)
+        self._apply_system_data(system_data)
+
+    def _apply_system_data(self, system_data: dict):
+        self._state = system_data.get("CMStatus", "Unknown")
+        # Pick common keys for model / firmware if available
+        self._model = system_data.get("ModelName") or system_data.get("Model")
+        self._sw_version = (
+            system_data.get("SoftwareVersion")
+            or system_data.get("SWVersion")
+            or system_data.get("FirmwareVersion")
+        )
+        self._attributes = {k: v for k, v in system_data.items() if k != "CMStatus"}
+
+    async def async_update(self):
+        try:
+            system_data = await self.hass.async_add_executor_job(self.technicolor_cga.system)
+            self._apply_system_data(system_data)
+        except Exception as e:
+            _LOGGER.error(f"Error updating {self.name}: {e}")
+
+
+class TechnicolorCGADHCPSensor(TechnicolorCGABaseSensor):
+    """DHCP sensor for Technicolor CGA."""
+
+    def __init__(self, technicolor_cga, hass, config_entry_id, host, name, attribute):
+        super().__init__(technicolor_cga, hass, config_entry_id, host, name)
+        self._attribute = attribute
+
+    async def async_update(self):
+        try:
+            dhcp_data = await self.hass.async_add_executor_job(self.technicolor_cga.dhcp)
+            self._state = dhcp_data.get(self._attribute, "Unknown")
+        except Exception as e:
+            _LOGGER.error(f"Error updating {self.name}: {e}")
+
+
+class TechnicolorCGAHostSensor(TechnicolorCGABaseSensor):
+    """Host sensor for Technicolor CGA."""
+
+    def __init__(self, technicolor_cga, hass, config_entry_id, host, name):
+        super().__init__(technicolor_cga, hass, config_entry_id, host, name)
+
+    async def async_update(self):
+        try:
+            host_data = await self.hass.async_add_executor_job(self.technicolor_cga.aDev)
+            self._state = len(host_data.get("hostTbl", []))
+            self._attributes = host_data
+        except Exception as e:
+            _LOGGER.error(f"Error updating {self.name}: {e}")
+
+
+class TechnicolorCGAHostDeltaSensor(SensorEntity):
+    """Sensor to calculate missing or inactive devices and track known devices.
+
+    Not inheriting from the base class originally; we still provide device_info
+    here to group this entity under the same device in the registry.
+    """
+
+    def __init__(self, technicolor_cga, hass, config_entry_id, host, name):
+        """Initialize the sensor."""
+        self.technicolor_cga = technicolor_cga
+        self.hass = hass
+        self._config_entry_id = config_entry_id
+        self._host = host
+        self._attr_name = name
         self._state = None
-        self._unsub = None
+        self._missing_devices = []
+        self._known_devices = {}  # dynamically learned known devices
+        _LOGGER.debug(f"{name} Sensor initialized (host: {host})")
 
+    @property
+    def unique_id(self):
+        """Return a unique ID."""
+        return f"{self._config_entry_id}_{self._attr_name.replace(' ', '_').lower()}"
 
     @property
     def name(self):
-        return self._name
+        """Return the name of the sensor."""
+        return self._attr_name
 
     @property
-    def unique_id(self):
-        return f"{self._config_entry.entry_id}_{self._ip}_{self.__class__.__name__.lower()}"
+    def state(self):
+        """Return the state of the sensor."""
+        return len(self._missing_devices)
+
+    @property
+    def extra_state_attributes(self):
+        """Return the state attributes of the sensor."""
+        return {
+            "missing_devices": sorted(
+                self._missing_devices, key=lambda x: self._ip_sort_key(x["last_ip"])
+            ),
+            "known_devices": sorted(
+                [
+                    {"mac": mac, "last_ip": details["ip"], "hostname": details["hostname"]}
+                    for mac, details in self._known_devices.items()
+                ],
+                key=lambda x: self._ip_sort_key(x["last_ip"]),
+            ),
+        }
 
     @property
     def device_info(self):
-        # zum selben Gerät gruppieren
+        """Match device registry info used by the other sensors."""
         return {
-            "identifiers": {("tplink_wpa4220", self._ip)},
-            "name": "TP-Link WPA4220",
-            "manufacturer": "TP-Link",
-            "model": "WPA4220",
+            "identifiers": {(DOMAIN, self._host)},
+            "name": "Technicolor CGA Gateway",
+            "manufacturer": "Technicolor",
+            "configuration_url": f"http://{self._host}/",
         }
-        
-    @property
-    def native_value(self):
-        return self._state      
 
-    @callback
-    def _handle_push(self) -> None:
-        # ruft async_update() auf und schreibt danach den State
-        self.schedule_update_ha_state(True)          
+    def _ip_sort_key(self, ip):
+        """Convert an IP address into a tuple of integers for correct sorting."""
+        try:
+            return tuple(map(int, ip.split('.')))
+        except ValueError:
+            # Handle invalid IPs gracefully by placing them at the end
+            return (999, 999, 999, 999)
 
-    
     async def async_update(self):
-        # keine I/O – nur aus Shared lesen
-        status = self._shared.get("status") or {}
-        self._compute_state(status)
-    
-    async def async_added_to_hass(self) -> None:
-        # JETZT ist self.hass garantiert gesetzt
-        self._unsub = async_dispatcher_connect(
-            self.hass,
-            SIGNAL_WPA4220_UPDATED.format(ip=self._ip),
-            self._handle_push,
-        )
-        # automatisch beim Entfernen deregistrieren
-        self.async_on_remove(self._unsub)
-        # einmal initial updaten, falls wir das erste Signal verpasst haben
-        self.async_schedule_update_ha_state(True)
-    
-    
-    async def async_will_remove_from_hass(self) -> None:
-        if getattr(self, "_unsub", None):
-            self._unsub()
-            self._unsub = None
+        """Fetch new state data for the sensor."""
+        _LOGGER.debug(f"Updating {self._attr_name} sensor")
+        try:
+            # Fetch host table
+            host_data = await self.hass.async_add_executor_job(self.technicolor_cga.aDev)
+            current_devices = {
+                host["physaddress"]: {
+                    "ip": host.get("ipaddress", "Unknown"),
+                    "hostname": host.get("hostname", "Unknown"),
+                    "active": host.get("active", "false"),
+                }
+                for host in host_data.get("hostTbl", [])
+            }
 
-    def _compute_state(self, status: dict):
-        raise NotImplementedError
+            # Update known devices
+            for mac, details in current_devices.items():
+                self._known_devices[mac] = details
 
+            # Determine missing or inactive devices
+            self._missing_devices = []
+            for mac, details in self._known_devices.items():
+                if mac not in current_devices:
+                    self._missing_devices.append(
+                        {
+                            "mac": mac,
+                            "last_ip": details["ip"],
+                            "hostname": details["hostname"],
+                            "status": "missing",
+                        }
+                    )
+                elif current_devices[mac]["active"] == "false":
+                    self._missing_devices.append(
+                        {
+                            "mac": mac,
+                            "last_ip": current_devices[mac]["ip"],
+                            "hostname": current_devices[mac]["hostname"],
+                            "status": "inactive",
+                        }
+                    )
 
-class WifiClientsTotalSensor(_DerivedBase):
-    @property
-    def icon(self): return "mdi:account-multiple"
-    def _compute_state(self, status):
-        clients = status.get("WifiClients") or []
-        self._state = len(clients)
-
-class WifiClients24Sensor(_DerivedBase):
-    @property
-    def icon(self): return "mdi:wifi"
-    def _compute_state(self, status):
-        clients = status.get("WifiClients")
-        if not isinstance(clients, list):
-            clients = []
-        def _is_24(c):
-            t = str((c or {}).get("type", "")).lower()
-            return "2.4" in t
-        self._state = sum(1 for c in clients if _is_24(c))
-
-
-class WifiClients5Sensor(_DerivedBase):
-    @property
-    def icon(self): return "mdi:wifi"
-    def _compute_state(self, status):
-        clients = status.get("WifiClients")
-        if not isinstance(clients, list):
-            clients = []
-        def _is_5(c):
-            t = str((c or {}).get("type", "")).lower()
-            return "5" in t and "5ghz" in t  # etwas strenger, aber robust
-        self._state = sum(1 for c in clients if _is_5(c))
-
-
-class PlcMaxRxRateSensor(_DerivedBase):
-    @property
-    def native_unit_of_measurement(self): return UnitOfDataRate.MEGABITS_PER_SECOND
-    @property
-    def icon(self): return "mdi:power-plug"
-    def _compute_state(self, status):
-        plc = status.get("PlcDeviceStatus")
-        if isinstance(plc, dict):
-            plc = [plc]
-        rx_vals = []
-        for d in plc or []:
-            v = (d or {}).get("rx_rate")
-            if isinstance(v, (int, float)):
-                rx_vals.append(int(v))
-            elif isinstance(v, str):
-                m = re.search(r"\d+", v)
-                if m:
-                    rx_vals.append(int(m.group(0)))
-        self._state = max(rx_vals) if rx_vals else None
-
-
-class PlcMaxTxRateSensor(_DerivedBase):
-    @property
-    def native_unit_of_measurement(self): return UnitOfDataRate.MEGABITS_PER_SECOND
-    @property
-    def icon(self): return "mdi:power-plug"
-    def _compute_state(self, status):
-        plc = status.get("PlcDeviceStatus")
-        if isinstance(plc, dict):
-            plc = [plc]
-        tx_vals = []
-        for d in plc or []:
-            v = (d or {}).get("tx_rate")
-            if isinstance(v, (int, float)):
-                tx_vals.append(int(v))
-            elif isinstance(v, str):
-                m = re.search(r"\d+", v)
-                if m:
-                    tx_vals.append(int(m.group(0)))
-        self._state = max(tx_vals) if tx_vals else None
-
-
-# Optional: Kanalsensoren
-class WifiChannel24Sensor(_DerivedBase):
-    def _compute_state(self, status):
-        wls = status.get("WlanStatus") or {}
-        self._state = wls.get("wireless_2g_channel")
-
-class WifiChannel5Sensor(_DerivedBase):
-    def _compute_state(self, status):
-        wls = status.get("WlanStatus") or {}
-        self._state = wls.get("wireless_5g_channel")
-
-class WifiSsid24Sensor(_DerivedBase):
-    @property
-    def icon(self): return "mdi:wifi"
-    def _compute_state(self, status):
-        wls = status.get("WlanStatus") or {}
-        self._state = wls.get("wireless_2g_ssid")
-
-class WifiSsid5Sensor(_DerivedBase):
-    @property
-    def icon(self): return "mdi:wifi"
-    def _compute_state(self, status):
-        wls = status.get("WlanStatus") or {}
-        self._state = wls.get("wireless_5g_ssid")
-
-class WifiChannel24Sensor(_DerivedBase):
-    @property
-    def icon(self): return "mdi:wifi-settings"
-    def _compute_state(self, status):
-        wls = status.get("WlanStatus") or {}
-        self._state = wls.get("wireless_2g_channel")
-
-class WifiChannel5Sensor(_DerivedBase):
-    @property
-    def icon(self): return "mdi:wifi-settings"
-    def _compute_state(self, status):
-        wls = status.get("WlanStatus") or {}
-        self._state = wls.get("wireless_5g_channel")
-
-class Wifi24EnabledBinary(_DerivedBinaryBase):
-    @property
-    def device_class(self): return BinarySensorDeviceClass.CONNECTIVITY
-    def _compute_on(self, status):
-        wls = status.get("WlanStatus") or {}
-        self._is_on = str(wls.get("wireless_2g_enable", "")).lower() == "on"
-
-class Wifi5EnabledBinary(_DerivedBinaryBase):
-    @property
-    def device_class(self): return BinarySensorDeviceClass.CONNECTIVITY
-    def _compute_on(self, status):
-        wls = status.get("WlanStatus") or {}
-        self._is_on = str(wls.get("wireless_5g_enable", "")).lower() == "on"
-
-class PlcPeersCountSensor(_DerivedBase):
-    @property
-    def icon(self): return "mdi:power-plug"
-    def _compute_state(self, status):
-        plc = status.get("PlcDeviceStatus")
-        if isinstance(plc, dict): plc = [plc]
-        self._state = len(plc or [])
-
-class PlcMinRxRateSensor(_DerivedBase):
-    @property
-    def native_unit_of_measurement(self): return UnitOfDataRate.MEGABITS_PER_SECOND
-    @property
-    def icon(self): return "mdi:power-plug"
-    def _compute_state(self, status):
-        plc = status.get("PlcDeviceStatus")
-        if isinstance(plc, dict): plc = [plc]
-        vals = []
-        for d in plc or []:
-            v = (d or {}).get("rx_rate")
-            if isinstance(v, (int, float)): vals.append(int(v))
-            elif isinstance(v, str):
-                m = re.search(r"\d+", v)
-                if m: vals.append(int(m.group(0)))
-        self._state = min(vals) if vals else None
-
-class PlcMinTxRateSensor(_DerivedBase):
-    @property
-    def native_unit_of_measurement(self): return UnitOfDataRate.MEGABITS_PER_SECOND
-    @property
-    def icon(self): return "mdi:power-plug"
-    def _compute_state(self, status):
-        plc = status.get("PlcDeviceStatus")
-        if isinstance(plc, dict): plc = [plc]
-        vals = []
-        for d in plc or []:
-            v = (d or {}).get("tx_rate")
-            if isinstance(v, (int, float)): vals.append(int(v))
-            elif isinstance(v, str):
-                m = re.search(r"\d+", v)
-                if m: vals.append(int(m.group(0)))
-        self._state = min(vals) if vals else None
-        
-        
-class PlcDegradedBinary(_DerivedBinaryBase):
-    @property
-    def device_class(self): return BinarySensorDeviceClass.PROBLEM
-    def _compute_on(self, status):
-        plc = status.get("PlcDeviceStatus")
-        if isinstance(plc, dict): plc = [plc]
-        worst = None
-        for d in plc or []:
-            for key in ("rx_rate", "tx_rate"):
-                v = (d or {}).get(key)
-                if isinstance(v, (int, float)): val = int(v)
-                elif isinstance(v, str):
-                    m = re.search(r"\d+", v); val = int(m.group(0)) if m else None
-                else:
-                    val = None
-                if val is not None:
-                    worst = val if worst is None else min(worst, val)
-        self._is_on = (worst is not None and worst < PLC_DEGRADED_THRESHOLD)
-
-
-class WifiClientsWithIpSensor(_DerivedBase):
-    @property
-    def icon(self): return "mdi:lan-connect"
-    def _compute_state(self, status):
-        clients = status.get("WifiClients")
-        if not isinstance(clients, list): clients = []
-        def has_ip(c):
-            ip = (c or {}).get("ip")
-            return isinstance(ip, str) and ip.lower() != "unknown" and len(ip) > 0
-        self._state = sum(1 for c in clients if has_ip(c))
-
-
-
+            _LOGGER.debug(f"{self._attr_name} sensor state updated: {self._missing_devices}")
+        except Exception as e:
+            _LOGGER.error(f"Error updating {self._attr_name} sensor: {e}")
