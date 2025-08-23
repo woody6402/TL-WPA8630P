@@ -1,21 +1,93 @@
-# TL-WPA8630P
+# TP‑Link WPA4220 (tested on TL‑WPA8630P) – Home Assistant Custom Sensors
 
-Status: Very early Draft, currently only as template for individual forks
+Monitor your TP‑Link **WPA4220 series** powerline Wi‑Fi extender from Home Assistant: Wi‑Fi client counts, SSIDs, channels, PLC link rates, and a “degraded PLC” binary sensor. The integration logs into the device, collects status (firmware/WLAN/clients/PLC), and exposes derived sensors for quick dashboards.
 
-Home Assistant Device Integration for TP-LINK powerline device WPA8630
-- Works with:
-  -  WPA8630P v2/v2.1 Hardware and latest build (2.0.6 Build 20240207 Rel.64435, 2.1.1 Build 20220605 Rel.83041)
-  -  Python code adapted and derived from TL-WPA4220 (so maybe this device type is als working)
-    - see: https://github.com/3v1n0/TL-WPA4220-python    
--  since blocking call were used in python library calls _hass.async_add_executor_job was used to capsulate them
--  since devices only allow one time login the login/retrieve/logout sequence is done for each sensor data retrieve
+<p align="center">
+  <img src="TL-WPA8630P-sensors.png" alt="Home Assistant entities screenshot" width="50%">
+</p>
 
-# Changes
+---
 
-- add device info: v0.91
-- minor bugs: v0.91
+## Features
+
+- **Primary status sensor** (`TP‑Link WPA4220 Status`)  
+  State: `connected` or `error`. Attributes include `FirmwareInfo`, `WlanStatus`, `WifiClients`, and `PlcDeviceStatus`. Passwords from the WLAN status are **masked** with `hidden (<timestamp>)`.
+- **Wi‑Fi client counters** with helpful attributes:
+  - `WLAN Clients (gesamt)` – all bands  
+  - `WLAN Clients 2.4 GHz`  
+  - `WLAN Clients 5 GHz`  
+  Each exposes `*_client_names` and `*_top12_by_packets` attributes (pre‑sorted by packet count).
+- **SSID & channel sensors:** `SSID 2.4 GHz`, `SSID 5 GHz`, `WLAN Kanal 2.4 GHz`, `WLAN Kanal 5 GHz`.
+- **PLC link‑rate sensors:** `PLC Max RX (Mbit/s)`, `PLC Max TX (Mbit/s)`, `PLC min RX (Mbit/s)`, `PLC min TX (Mbit/s)` (unit: Mbit/s).
+- **Binary sensors:** `WLAN 2.4 GHz aktiv`, `WLAN 5 GHz aktiv` (device class: connectivity) and `PLC unter 100 Mbit/s?` (device class: problem, threshold = 100 Mbit/s).
+- **Device Registry integration:** model/firmware/hardware are written to the registry and Wi‑Fi MACs are registered as connections. Configuration URL points to `http://<device-ip>/`.
+- **Update cadence:** by default every **2 minutes**. Derived sensors update immediately after the main sensor refreshes (via dispatcher).
+
+---
+
+## Installation
+
+1. Create a folder in your Home Assistant config:  
+   `custom_components/tplink_wpa4220/`
+2. Copy the integration files into that folder (this `sensor.py` plus the usual `manifest.json`, `__init__.py`, `const.py`, and the helper module `TL_WPA4220.py`).
+3. Restart Home Assistant.
+
+> Tip: If you keep this repository as a Git subfolder inside `custom_components`, updates are as simple as pulling new commits.
+
+---
+
+## Configuration
+
+Add the integration from **Settings → Devices & Services → Add Integration** and provide:
+
+- **IP address** of the device
+- **Password** (the same one used for the device’s web UI)
+
+The integration stores these as a config entry and will begin polling automatically. If the primary sensor shows `error`, check the `error` attribute and your credentials/IP; details are also written to Home Assistant’s log.
+
+---
+
+## Entities created
+
+**Sensors**
+
+- `TP‑Link WPA4220 Status`
+- `WLAN Clients (gesamt)` / `WLAN Clients 2.4 GHz` / `WLAN Clients 5 GHz`
+- `SSID 2.4 GHz` / `SSID 5 GHz`
+- `WLAN Kanal 2.4 GHz` / `WLAN Kanal 5 GHz`
+- `PLC Max RX (Mbit/s)` / `PLC Max TX (Mbit/s)` / `PLC min RX (Mbit/s)` / `PLC min TX (Mbit/s)`
+- `PLC Peers (Anzahl)` (attribute `plc_peers_macs`)
+- `WLAN Clients mit IP` (counts clients that report a non‑unknown IP)
+
+**Binary sensors**
+
+- `WLAN 2.4 GHz aktiv` / `WLAN 5 GHz aktiv`
+- `PLC unter 100 Mbit/s?` (true when the worst PLC RX/TX rate < 100 Mbit/s)
+
+---
+
+## How it works (under the hood)
+
+- The main entity logs in using a small helper (`TL_WPA4220`), fetches firmware info, PLC device status, WLAN status, and Wi‑Fi clients in parallel, then logs out. Data is shared with derived entities via a dispatcher signal so they update immediately after each refresh.
+- During updates, device‑registry metadata (model, SW/HW versions, MAC connections) is refreshed for the HA device representing the extender.
+
+---
+
+## Notes & limitations
+
+- Entity names are currently in **German** to match the author’s setup (e.g., *WLAN Clients (gesamt)*).
+- Only information available from the device’s web interface is exposed; some attributes are summarized (e.g., top‑talkers by packets).
+- Tested with **TL‑WPA8630P**; designed for the **WPA4220** family (model is read from the device and written to the registry)
+
+
+## Changes
+
+- add device info, minor bugs: v0.91
 - Sensors for PLC TX/RX, PLC Peers, #Wlan Clients, Wlan Channel, .... : v0.93
-<br>(under test, start with 0.91 where alle the information is available under the attribute of the main sensor)
 - adding attributes to the sensors: v0.931
-<img src="TL-WPA8630P-sensors.png" alt="Dashboard-Screenshot" width="400">
+<br>
+<br>
+(under test, start with 0.91 where alle the information is available under the attribute of the main sensor)
+
+
 
