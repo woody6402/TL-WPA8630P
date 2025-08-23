@@ -36,10 +36,8 @@ see: https://github.com/3v1n0/TL-WPA4220-python
 
 1. Create a folder in your Home Assistant config:  
    `custom_components/tplink_wpa4220/`
-2. Copy the integration files into that folder (this `sensor.py` plus the usual `manifest.json`, `__init__.py`, `const.py`, and the helper module `TL_WPA4220.py`).
+2. Copy the integration files into that folder.
 3. Restart Home Assistant.
-
-> Tip: If you keep this repository as a Git subfolder inside `custom_components`, updates are as simple as pulling new commits.
 
 ---
 
