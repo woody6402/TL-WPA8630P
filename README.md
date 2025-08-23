@@ -8,6 +8,13 @@ Monitor your TP‑Link **WPA4220 series** powerline Wi‑Fi extender from Home A
 
 ---
 
+## Derived from
+
+Python code adapted and derived from TL-WPA4220 (so maybe this device type is als working)<br>
+see: https://github.com/3v1n0/TL-WPA4220-python
+
+---
+
 ## Features
 
 - **Primary status sensor** (`TP‑Link WPA4220 Status`)  
@@ -47,24 +54,6 @@ The integration stores these as a config entry and will begin polling automatica
 
 ---
 
-## Entities created
-
-**Sensors**
-
-- `TP‑Link WPA4220 Status`
-- `WLAN Clients (gesamt)` / `WLAN Clients 2.4 GHz` / `WLAN Clients 5 GHz`
-- `SSID 2.4 GHz` / `SSID 5 GHz`
-- `WLAN Kanal 2.4 GHz` / `WLAN Kanal 5 GHz`
-- `PLC Max RX (Mbit/s)` / `PLC Max TX (Mbit/s)` / `PLC min RX (Mbit/s)` / `PLC min TX (Mbit/s)`
-- `PLC Peers (Anzahl)` (attribute `plc_peers_macs`)
-- `WLAN Clients mit IP` (counts clients that report a non‑unknown IP)
-
-**Binary sensors**
-
-- `WLAN 2.4 GHz aktiv` / `WLAN 5 GHz aktiv`
-- `PLC unter 100 Mbit/s?` (true when the worst PLC RX/TX rate < 100 Mbit/s)
-
----
 
 ## How it works (under the hood)
 
