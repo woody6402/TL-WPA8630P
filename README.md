@@ -16,5 +16,6 @@ Home Assistant Device Integration for TP-LINK powerline device WPA8630
 - minor bugs: v0.91
 - Sensors for PLC TX/RX, PLC Peers, #Wlan Clients, Wlan Channel, .... : v0.93
 (under test, start with 0.91 where alle the information is available under the attribute of the main sensor)
+- adding attributes to the sensors: v0.931
 <img src="TL-WPA8630P-sensors.png" alt="Dashboard-Screenshot" width="400">
 
