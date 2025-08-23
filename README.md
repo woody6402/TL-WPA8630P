@@ -1,4 +1,5 @@
-# TL‑WPA8630P – Home Assistant Custom Sensors
+# TL‑WPA8630P
+(Home Assistant Custom Integration)
 
 Monitor your TP‑Link **WPA4220 series** powerline Wi‑Fi extender from Home Assistant: Wi‑Fi client counts, SSIDs, channels, PLC link rates, and a “degraded PLC” binary sensor. The integration logs into the device, collects status (firmware/WLAN/clients/PLC), and exposes derived sensors for quick dashboards.
 
