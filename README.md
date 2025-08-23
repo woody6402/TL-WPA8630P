@@ -63,7 +63,6 @@ The integration stores these as a config entry and will begin polling automatica
 
 ## Notes & limitations
 
-- Entity names are currently in **German** to match the author’s setup (e.g., *WLAN Clients (gesamt)*).
 - Only information available from the device’s web interface is exposed; some attributes are summarized (e.g., top‑talkers by packets).
 - Tested with **TL‑WPA8630P**; designed for the **WPA4220** family (model is read from the device and written to the registry)
 
