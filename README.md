@@ -87,7 +87,7 @@ custom_components/technicolor_cga/
 > under test, if you have troubles with >0.93, fall back to 0.91 where alle the information is available under the attribute of the main sensor. This was running in my environment over a year, additional sensors were derived from the attributes via templates.
 The original TLA_4220.py provides a command line interface which can be used to check if it's working in the own environment:
 
-``` bash 
+```bash 
 python3 TL_WPA4220.py -p <your-password> <your-ip> show
 ```
 
