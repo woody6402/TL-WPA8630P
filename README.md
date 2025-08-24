@@ -11,7 +11,7 @@ Monitor your TP‑Link **WPA8630 series** powerline Wi‑Fi extender from Home A
 
 ## Derived from
 
-Python code adapted and derived from TL-WPA4220 (so maybe this device type is als working)<br>
+Python code adapted and derived from TL-WPA4220 (so maybe this device type is also working)<br>
 see: https://github.com/3v1n0/TL-WPA4220-python
 
 ---
@@ -19,12 +19,12 @@ see: https://github.com/3v1n0/TL-WPA4220-python
 ## Features
 
 - **Primary status sensor** (`TP‑Link WPA4220 Status`)  
-  State: `connected` or `error`. Attributes include `FirmwareInfo`, `WlanStatus`, `WifiClients`, and `PlcDeviceStatus`. Passwords from the WLAN status are **masked** with `hidden (<timestamp>)`.
+  State: `connected` or `error`. Attributes include `FirmwareInfo`, `WlanStatus`, `WifiClients`, and `PlcDeviceStatus`. Passwords from the WLAN status are **masked** with `hidden`.
 - **Wi‑Fi client counters** with helpful attributes:
   - `WLAN Clients (gesamt)` – all bands  
   - `WLAN Clients 2.4 GHz`  
   - `WLAN Clients 5 GHz`  
-  Each exposes `*_client_names` and `*_top12_by_packets` attributes (pre‑sorted by packet count).
+  Each exposes `client names` and `top 12 by packets` attributes (pre‑sorted by packet count).
 - **SSID & channel sensors:** `SSID 2.4 GHz`, `SSID 5 GHz`, `WLAN Kanal 2.4 GHz`, `WLAN Kanal 5 GHz`.
 - **PLC link‑rate sensors:** `PLC Max RX (Mbit/s)`, `PLC Max TX (Mbit/s)`, `PLC min RX (Mbit/s)`, `PLC min TX (Mbit/s)` (unit: Mbit/s).
 - **Binary sensors:** `WLAN 2.4 GHz aktiv`, `WLAN 5 GHz aktiv` (device class: connectivity) and `PLC unter 100 Mbit/s?` (device class: problem, threshold = 100 Mbit/s).
@@ -64,7 +64,7 @@ The integration stores these as a config entry and will begin polling automatica
 ## Notes & limitations
 
 - Only information available from the device’s web interface is exposed; some attributes are summarized (e.g., top‑talkers by packets).
-- Tested with **TL‑WPA8630P**; designed for the **WPA4220** family (model is read from the device and written to the registry)
+- Tested with **TL‑WPA8630P**; but the reused API code was intially designed for the **WPA4220** family (model is read from the device and written to the registry)
 
 
 ## Changes
@@ -73,8 +73,7 @@ The integration stores these as a config entry and will begin polling automatica
 - Sensors for PLC TX/RX, PLC Peers, #Wlan Clients, Wlan Channel, .... : v0.93
 - adding attributes to the sensors: v0.931
 <br>
-<br>
-(under test, start with 0.91 where alle the information is available under the attribute of the main sensor)
+> under test, if you have troubles with >0.93, fall back to 0.91 where alle the information is available under the attribute of the main sensor. This was running in my environment over a year, additional sensors were derived from the attributes via templates.
 
 
 
