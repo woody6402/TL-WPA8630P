@@ -53,6 +53,17 @@ The integration stores these as a config entry and will begin polling automatica
 
 ---
 
+## Directory structure
+
+```
+custom_components/technicolor_cga/
+├─ __init__.py
+├─ config_flow.py
+├─ manifest.json
+├─ const.py
+├─ TL_WPA4220.py
+└─ sensor.p
+```
 
 ## How it works (under the hood)
 
@@ -74,6 +85,12 @@ The integration stores these as a config entry and will begin polling automatica
 - adding attributes to the sensors: v0.931
 <br>
 > under test, if you have troubles with >0.93, fall back to 0.91 where alle the information is available under the attribute of the main sensor. This was running in my environment over a year, additional sensors were derived from the attributes via templates.
+The original TLA_4220.py provides a command line interface which can be used to check if it's working in the own environment:
+
+``` bash 
+python3 TL_WPA4220.py -p <your-password> <your-ip> show
+```
+
 
 
 
