@@ -1,0 +1,17 @@
+{
+  "domain": "tplink_wpa",
+  "name": "TP-Link WPA Powerline (WPA4220 / WPA8630P)",
+  "version": "1.0.0",
+  "documentation": "https://github.com/woody6402/TL-WPA8630P",
+  "issue_tracker": "https://github.com/woody6402/TL-WPA8630P/issues",
+  "requirements": [
+    "requests>=2.31.0",
+    "pycryptodome>=3.20.0"
+  ],
+  "dependencies": [],
+  "codeowners": ["@woody6402"],
+  "iot_class": "local_polling",
+  "config_flow": true,
+  "integration_type": "device"
+}
+
