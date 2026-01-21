@@ -23,7 +23,7 @@ from homeassistant.helpers.dispatcher import (
     async_dispatcher_send,
 )
 
-SIGNAL_WPA4220_UPDATED = "tplink_wpa4220_updated_{ip}"
+SIGNAL_WPA4220_UPDATED = "tplink_wpa_updated_{ip}"
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -105,13 +105,13 @@ class TPLinkStatusSensor(SensorEntity):
     
     @property
     def unique_id(self):
-        return f"tplink_wpa4220_{self._ip}"
+        return f"tplink_wpa_{self._ip}"
         
     @property
     def device_info(self):
            
         return {
-            "identifiers": {("tplink_wpa4220", self._ip)},  # eindeutige ID
+            "identifiers": {("tplink_wpa", self._ip)},  # eindeutige ID
             "name": "TP-Link WPA4220",
             "manufacturer": "TP-Link",
             "model": "WPA4220", 
@@ -183,7 +183,7 @@ class TPLinkStatusSensor(SensorEntity):
 
                 dev = device_registry.async_get_or_create(
                     config_entry_id=self._config_entry.entry_id,
-                    identifiers={("tplink_wpa4220", self._ip)},
+                    identifiers={("tplink_wpa", self._ip)},
                     manufacturer="TP-Link",
                     name="TP-Link WPA4220",
                     connections=conn_set if conn_set else None,
@@ -196,7 +196,7 @@ class TPLinkStatusSensor(SensorEntity):
                     hw_version=fw_data.get("hardware_version"),
                 )
                 
-                dev_after = device_registry.async_get_device(identifiers={("tplink_wpa4220", self._ip)})
+                dev_after = device_registry.async_get_device(identifiers={("tplink_wpa", self._ip)})
                 _LOGGER.debug(
                     f"DR check -> connections={getattr(dev_after, 'connections', None)}, "
                     f"model={getattr(dev_after, 'model', None)}, sw={getattr(dev_after, 'sw_version', None)}, "
@@ -241,7 +241,7 @@ class _DerivedBinaryBase(BinarySensorEntity):
     @property
     def device_info(self):
         return {
-            "identifiers": {("tplink_wpa4220", self._ip)},
+            "identifiers": {("tplink_wpa", self._ip)},
             "name": "TP-Link WPA4220",
             "manufacturer": "TP-Link",
             "model": "WPA4220",
@@ -307,7 +307,7 @@ class _DerivedBase(SensorEntity):
     def device_info(self):
         # zum selben Gerät gruppieren
         return {
-            "identifiers": {("tplink_wpa4220", self._ip)},
+            "identifiers": {("tplink_wpa", self._ip)},
             "name": "TP-Link WPA4220",
             "manufacturer": "TP-Link",
             "model": "WPA4220",
