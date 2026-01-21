@@ -214,20 +214,20 @@ class TL_WPA4220(object):
 
     def get_wlan_status(self):
         self._require_login()
-        return self._encrypted_req('admin/wlan_status', self.Op.READ)
+        return self._optional_encrypted_req('admin/wlan_status', self.Op.READ, {})
 
     def get_guest_wlan_2g_status(self):
         self._require_login()
-        return self._encrypted_req('admin/guest?form=guest_2g', self.Op.READ)
+        return self._optional_encrypted_req('admin/guest?form=guest_2g', self.Op.READ, {})
 
     def get_guest_wlan_5g_status(self):
         self._require_login()
-        return self._encrypted_req('admin/guest?form=guest_5g', self.Op.READ)
+        return self._optional_encrypted_req('admin/guest?form=guest_5g', self.Op.READ, {})
 
     def get_wifi_move_status(self):
         self._require_login()
-        val = self._encrypted_req('admin/wifiMove.json', self.Op.READ)
-        return self._get_enabled_value(val)
+        val = self._optional_encrypted_req('admin/wifiMove.json', self.Op.READ)
+        return self._get_enabled_value(val) if val else False
 
     def toggle_wifi_move(self, enabled):
         self._require_login()
@@ -238,16 +238,16 @@ class TL_WPA4220(object):
 
     def get_wifi_time_control_enabled(self):
         self._require_login()
-        return self._encrypted_req('admin/wifiTimeEnable', self.Op.READ)
+        return self._optional_encrypted_req('admin/wifiTimeEnable', self.Op.READ)
 
     def get_wifi_time_control_status(self):
         self._require_login()
-        return self._encrypted_req('admin/wifiTimeControl', self.Op.READ)
+        return self._optional_encrypted_req('admin/wifiTimeControl', self.Op.READ, {})
 
     def get_wifi_clients(self):
         self._require_login()
         # return self._encrypted_req('data/wireless.statistics.json', self.Op.LOAD)
-        return self._encrypted_req('admin/wireless?form=statistics', self.Op.LOAD)
+        return self._optional_encrypted_req('admin/wireless?form=statistics', self.Op.LOAD, {})
 
     def get_plc_device_status(self):
         self._require_login()
@@ -270,7 +270,7 @@ class TL_WPA4220(object):
         self._require_login()
         try:
             return self._encrypted_req('admin/syslog?form=log', self.Op.LOAD)
-        except self.TL_WPA4220.TpError as e:
+        except TL_WPA4220.TpError as e:
             if e.error_code:
                 raise e
             self.logger.warning('No log level set, impossible to get logging')
@@ -326,6 +326,21 @@ class TL_WPA4220(object):
     def _get_enabled_value(self, data):
         val = {'on': 1, 'off': 0}.get(data.get('enable'), data.get('enable'))
         return bool(int(val))
+
+    def _optional_encrypted_req(self, path, operation, default=None):
+        """Wrapper around _encrypted_req that returns a default on failure.
+
+        Some models (e.g. TL-PA9020P without Wi-Fi) do not expose all
+        endpoints used by the TL-WPA4220 range.  Instead of raising an
+        exception when an endpoint is missing, gracefully return a default
+        value so that other features (like PLC status) remain usable.
+        """
+        try:
+            return self._encrypted_req(path, operation)
+        except TL_WPA4220.TpError as e:
+            # Log at debug level to avoid spamming logs in normal operation
+            self.logger.debug(f"Optional request failed for {path}: {e}")
+            return default
 
     def _unset_login_data(self):
         self._iv = None
