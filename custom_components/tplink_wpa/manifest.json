@@ -1,7 +1,7 @@
 {
   "domain": "tplink_wpa",
   "name": "TP-Link WPA Powerline (WPA4220 / WPA8630P / PA9020P)",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "documentation": "https://github.com/woody6402/TL-WPA8630P",
   "issue_tracker": "https://github.com/woody6402/TL-WPA8630P/issues",
   "requirements": [
