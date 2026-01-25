@@ -14,6 +14,8 @@ Monitor your TP‑Link **WPA8630 series** powerline Wi‑Fi extender from Home A
 Python code adapted and derived from TL-WPA4220 (so maybe this device type is also working)<br>
 see: https://github.com/3v1n0/TL-WPA4220-python
 
+this code part has LGPL.
+
 ---
 
 ## Features
