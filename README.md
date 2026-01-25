@@ -14,7 +14,11 @@ Monitor your TP‑Link **WPA8630 series** powerline Wi‑Fi extender from Home A
 Python code adapted and derived from TL-WPA4220 (so maybe this device type is also working)<br>
 see: https://github.com/3v1n0/TL-WPA4220-python
 
-this code part has LGPL.
+The original TLA_4220.py provides a command line interface which can be used to check if it's working in the own or in the HA environment:
+```bash 
+python3 TL_WPA4220.py -p <your-password> <your-ip> show
+```
+This code part has LGPL.
 
 ---
 
@@ -23,7 +27,7 @@ this code part has LGPL.
 - **Primary status sensor** (`TP‑Link WPA4220 Status`)  
   State: `connected` or `error`. Attributes include `FirmwareInfo`, `WlanStatus`, `WifiClients`, and `PlcDeviceStatus`. Passwords from the WLAN status are **masked** with `hidden`.
 - **Wi‑Fi client counters** with helpful attributes:
-  - `WLAN Clients (gesamt)` – all bands  
+  - `WLAN Clients (summary)` – all bands  
   - `WLAN Clients 2.4 GHz`  
   - `WLAN Clients 5 GHz`  
   Each exposes `client names` and `top 12 by packets` attributes (pre‑sorted by packet count).
@@ -50,6 +54,7 @@ Add the integration from **Settings → Devices & Services → Add Integration**
 
 - **IP address** of the device
 - **Password** (the same one used for the device’s web UI)
+- **Max IPs in Attributes** teh number of shown IPs in the attributes (default 12)
 
 The integration stores these as a config entry and will begin polling automatically. If the primary sensor shows `error`, check the `error` attribute and your credentials/IP; details are also written to Home Assistant’s log.
 
@@ -78,6 +83,7 @@ custom_components/technicolor_cga/
 
 - Only information available from the device’s web interface is exposed; some attributes are summarized (e.g., top‑talkers by packets).
 - Tested with **TL‑WPA8630P**; but the reused API code was intially designed for the **WPA4220** family (model is read from the device and written to the registry)
+- Somebody rpeorted that TL-PA9020P is also working with some minor adaptations (eliminating wlan stuff). The patch is in, but without beeing tested.
 
 
 ## Changes
@@ -85,16 +91,4 @@ custom_components/technicolor_cga/
 - add device info, minor bugs: v0.91
 - Sensors for PLC TX/RX, PLC Peers, #Wlan Clients, Wlan Channel, .... : v0.93
 - adding attributes to the sensors: v0.931
-<br>
-> under test, if you have troubles with >0.93, fall back to 0.91 where alle the information is available under the attribute of the main sensor. This was running in my environment over a year, additional sensors were derived from the attributes via templates.
-The original TLA_4220.py provides a command line interface which can be used to check if it's working in the own environment:
-
-```bash 
-python3 TL_WPA4220.py -p <your-password> <your-ip> show
-```
-
-
-
-
-
-
+- HACS installation: v1.0.5
