@@ -624,7 +624,11 @@ if __name__ == '__main__':
         print('Wlan_2gStatus:', device.get_wlan_2g_status())      
     elif args.action == 'wlan5g-show':
         print('Wlan_5gStatus:', device.get_wlan_5g_status())
-
+        
+    elif args.action == 'gwlan2g-show':
+        print('GuestWlan_2gStatus:', device.get_guest_wlan_2g_status())      
+    elif args.action == 'gwlan5g-show':
+        print('GuestWlan_5gStatus:', device.get_guest_wlan_5g_status())
 
         
         
