@@ -235,13 +235,18 @@ class TL_WPA4220(object):
             cur = (self.get_guest_wlan_2g_status() if band == "2g" else self.get_guest_wlan_5g_status()) or {}
             prefix = f"guest_{band}_"
             endpoint = f"admin/guest?form=guest_{band}"
-            enc = cur.get(prefix + "encryption", "none")
-            data = {
-                "enable": "on" if enabled else "off",
-                "ssid": cur.get(prefix + "ssid", ""),
-                "encryption": enc,
-            }
+
+            # 1) Copy current data but strip the prefix from keys
+            data = {}
+            for k, v in cur.items():
+                if k.startswith(prefix):
+                    data[k[len(prefix):]] = v  # e.g. guest_2g_ssid -> ssid
+            
+            data["enable"] = "on" if enabled else "off"
+
+            #print(data)
             return self._encrypted_req(endpoint, self.Op.WRITE, data)
+
 
         # --- wireless ---
         data = (self.get_wlan_2g_status() if band == "2g" else self.get_wlan_5g_status()) or {}
