@@ -30,7 +30,7 @@ class TL_WPA4220(object):
         self._seq = None
         self._e = None
         self._n = None
-        self._timeout = 15*1000
+        self._timeout = 10  # seconds (original code incorrectly used ms)
         self._logger = logging.getLogger(__class__.__name__)
         console_handler = logging.StreamHandler()
         console_handler.setFormatter(logging.Formatter(
@@ -111,12 +111,11 @@ class TL_WPA4220(object):
 
     def logout(self):
         self._require_login()
-        old_timeout = self._timeout
-        self._timeout = 2.0 # Do not block in this case...
-        self._encrypted_req('admin/logout.htm', self.Op.WRITE, extra_headers={
-            'Cookie': 'Authorization=;path=/'
-        })
-        self._timeout = old_timeout
+        # Skipping the HTTP logout call: on powerline networks (e.g. WPA8631P)
+        # the logout endpoint appears to invalidate sessions globally across all
+        # adapters sharing the same powerline master, breaking concurrent polling
+        # of multiple devices. The session expires naturally on the device side
+        # (typically within 5 minutes), so this is safe to skip.
         self._unset_login_data()
 
     def reboot(self):
@@ -379,7 +378,7 @@ class TL_WPA4220(object):
 
     def _get_rsa_pubkey_seq(self):
         r = requests.post("http://{}/login?form=auth".format(self.ip),
-            data={"operation": "read"})
+            data={"operation": "read"}, timeout=10)
         r = r.json()
         if not r.get("success"):
             raise TpError("Something went wrong, couldn't retrieve RSA public key",
@@ -451,7 +450,7 @@ class TL_WPA4220(object):
         except JSONDecodeError as e:
             raise TL_WPA4220.TpError(f'Failed to decode: {e}', 'decode-error')
         except Exception as e:
-            print("There was some error, could not decrypt response. Error: {}".format(e))
+            self.logger.debug("Could not decrypt response: %s", e)
             raise e
 
         raise TL_WPA4220.TpError(

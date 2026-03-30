@@ -25,6 +25,18 @@ SCAN_INTERVAL = timedelta(minutes=2)
 
 PLC_DEGRADED_THRESHOLD = 100  # Mbit/s
 
+# Global lock: the WPA8631P (and likely other models) only accept one active
+# session at a time. Without this, two configured devices logging in
+# simultaneously invalidate each other's session, causing empty responses
+# and JSONDecodeError. All polling is serialized through this lock.
+_DEVICE_POLL_LOCK: asyncio.Lock | None = None
+
+def _get_poll_lock() -> asyncio.Lock:
+    global _DEVICE_POLL_LOCK
+    if _DEVICE_POLL_LOCK is None:
+        _DEVICE_POLL_LOCK = asyncio.Lock()
+    return _DEVICE_POLL_LOCK
+
 
 async def async_setup_entry(hass: HomeAssistant, config_entry, async_add_entities):
     """Set up sensors for TP-Link WPA powerline device."""
@@ -116,17 +128,28 @@ class TPLinkStatusSensor(SensorEntity):
         }
 
     async def async_update(self):
+        async with _get_poll_lock():
+            await self._do_update()
+
+    async def _do_update(self):
         device = None
         try:
             device = TL_WPA4220(self._ip)
             _LOGGER.debug("Logging in to the device... %s", self._ip)
             await self._hass.async_add_executor_job(device.login, self._password)
 
-            fw_data, plc_list, wls_data, wic_list = await asyncio.gather(
-                self._hass.async_add_executor_job(device.get_firmware_info),
-                self._hass.async_add_executor_job(device.get_plc_device_status),
-                self._hass.async_add_executor_job(device.get_wlan_status),
-                self._hass.async_add_executor_job(device.get_wifi_clients),
+            # Sequential calls: TL_WPA4220 uses a single _seq counter incremented
+            # per request; parallel calls cause duplicate _seq and empty responses.
+            # Each request has a 10s timeout in TL_WPA4220; 60s total guard here.
+            async def _fetch_all():
+                f  = await self._hass.async_add_executor_job(device.get_firmware_info)
+                p  = await self._hass.async_add_executor_job(device.get_plc_device_status)
+                w  = await self._hass.async_add_executor_job(device.get_wlan_status)
+                wc = await self._hass.async_add_executor_job(device.get_wifi_clients)
+                return f, p, w, wc
+
+            fw_data, plc_list, wls_data, wic_list = await asyncio.wait_for(
+                _fetch_all(), timeout=60
             )
 
             now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
