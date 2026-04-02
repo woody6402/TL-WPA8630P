@@ -88,7 +88,8 @@ custom_components/technicolor_cga/
 
 ## Changes
 
-- add device info, minor bugs: v0.91
-- Sensors for PLC TX/RX, PLC Peers, #Wlan Clients, Wlan Channel, .... : v0.93
-- adding attributes to the sensors: v0.931
-- HACS installation: v1.0.5
+- v0.91: add device info, minor bugs
+- v0.93: Sensors for PLC TX/RX, PLC Peers, #Wlan Clients, Wlan Channel, .... 
+- v0.931: adding attributes to the sensors
+- v1.0.5: HACS installation
+- v1.0.6: stabilizations ...
