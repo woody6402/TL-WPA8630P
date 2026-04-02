@@ -109,7 +109,7 @@ class TL_WPA4220(object):
     def logged_in(self):
         return self._password_hash != None
 
-    def logout(self):
+    def logout_x(self):
         self._require_login()
         # Skipping the HTTP logout call: on powerline networks (e.g. WPA8631P)
         # the logout endpoint appears to invalidate sessions globally across all
@@ -117,6 +117,18 @@ class TL_WPA4220(object):
         # of multiple devices. The session expires naturally on the device side
         # (typically within 5 minutes), so this is safe to skip.
         self._unset_login_data()
+
+    def logout(self):
+        self._require_login()
+        # not skipping logout since manual logon to the device web maybe blocked 
+        old_timeout = self._timeout
+        self._timeout = 2.0 # Do not block in this case...
+        self._encrypted_req('admin/logout.htm', self.Op.WRITE, extra_headers={
+            'Cookie': 'Authorization=;path=/'
+        })
+        self._timeout = old_timeout
+        self._unset_login_data()
+
 
     def reboot(self):
         self._require_login()
@@ -381,7 +393,7 @@ class TL_WPA4220(object):
             data={"operation": "read"}, timeout=10)
         r = r.json()
         if not r.get("success"):
-            raise TpError("Something went wrong, couldn't retrieve RSA public key",
+            raise self.TpError("Something went wrong, couldn't retrieve RSA public key",
                 r.get("errorcode"))
 
         self._n = int(r["data"]["key"][0], 16)
@@ -397,9 +409,12 @@ class TL_WPA4220(object):
         encoded_data = urlencode(data)
         encrypted_data = self._aes_encrypt(encoded_data) if encoded_data else None
 
+        data_len = len(encrypted_data) if encrypted_data else 0
+        next_seq = self._seq + data_len
+
         sign_dict = {
             'h': self._password_hash,
-            's': self._seq + (len(encrypted_data) if encrypted_data else 0),
+            's': next_seq
         }
 
         if operation == self.Op.LOGIN:
@@ -437,25 +452,74 @@ class TL_WPA4220(object):
             return None
 
         r.raise_for_status()
+        
+        response = None
 
         try:
-            encrypted_data = r.json().get("data")
-            response = self._aes_decrypt(encrypted_data)
-            self.logger.debug(f'response: {response}')
+            resp_json = r.json()
+            encrypted_resp = resp_json.get("data")
+
+            if not encrypted_resp:
+                raise TL_WPA4220.TpError(
+                    f"No encrypted data in response: {resp_json!r}",
+                    "missing-data",
+                )
+
+            response = self._aes_decrypt(encrypted_resp)
+
+            if not response or not response.strip():
+                raise TL_WPA4220.TpError(
+                    "Empty decrypted response",
+                    "empty-decrypted-response",
+                )
+
             parsed_response = json.loads(response)
+
+            if not isinstance(parsed_response, dict):
+                raise TL_WPA4220.TpError(
+                    f"Unexpected decrypted JSON type: {type(parsed_response).__name__}",
+                    "invalid-response-type",
+                )
+
             if parsed_response.get("success"):
                 return parsed_response.get("data")
 
-            error_code = parsed_response.get("errorcode")
-        except JSONDecodeError as e:
-            raise TL_WPA4220.TpError(f'Failed to decode: {e}', 'decode-error')
-        except Exception as e:
-            self.logger.debug("Could not decrypt response: %s", e)
-            raise e
+            error_code = (
+                parsed_response.get("errorcode")
+                or parsed_response.get("errCode")
+            )
 
-        raise TL_WPA4220.TpError(
-            f'Failed to execute command, error code: {error_code}', error_code)
+            raise TL_WPA4220.TpError(
+                f"Device returned unsuccessful response: {parsed_response!r}",
+                error_code,
+            )
 
+        except (json.JSONDecodeError, JSONDecodeError, requests.exceptions.JSONDecodeError) as e:
+            if response and response.strip():
+                payload = response[:300]
+                msg = f"Failed to decode JSON from decrypted response: {payload!r}"
+            else:
+                payload = getattr(r, "text", "")[:300]
+                msg = f"Failed to decode outer JSON response: {payload!r}"
+
+            raise TL_WPA4220.TpError(msg, "decode-error") from e
+
+
+def print_tp_error(prefix, e):
+    if e.error_code == 'timeout':
+        print(f"[!] {prefix}: request timed out")
+    elif e.error_code == 'decode-error':
+        print(f"[!] {prefix}: invalid JSON response from device")
+    elif e.error_code == 'missing-data':
+        print(f"[!] {prefix}: missing encrypted response data")
+    elif e.error_code == 'empty-decrypted-response':
+        print(f"[!] {prefix}: empty decrypted response")
+    elif e.error_code == 'invalid-response-type':
+        print(f"[!] {prefix}: unexpected response type")
+    elif e.error_code:
+        print(f"[!] {prefix}: device error code: {e.error_code}")
+    else:
+        print(f"[!] {prefix}: {e}")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Tools to manage the TL-WPA4220')
@@ -474,63 +538,72 @@ if __name__ == '__main__':
 
     try:
         device.login(args.password)
-        #print("[+] Login executed successfully")
     except TL_WPA4220.TpError as e:
-        if (e.error_code == 'timeout'):
-            # We could get the reason by the first value of JS httpAutErrorArray
-            print(f"[!] Login failed, password invalid or another device is logged in")
+        if e.error_code == 'timeout':
+            print("[!] Login failed, password invalid or another device is logged in")
         else:
-            print(f"[!] Login failed: {e}")
+            print_tp_error("Login failed", e)
         sys.exit(1)
 
-    exit_status = True
-    if args.action == 'show':
-        device.set_system_log_filters(
-            TL_WPA4220.LogType.ALL, TL_WPA4220.LogLevel.ALL)
+    try:
+        exit_status = True
 
-        print('FirmwareInfo:', device.get_firmware_info())
-        print('Region:', device.get_region())
-        print('Locale:', device.get_locale())
-        print('Locales:', device.get_locales())
-        print('Profile:', device.get_profile())
-        print('LanSettings', device.get_lan_settings())
-        print('DhcpSettings', device.get_dhcp_settings())
-        #print('DhcpClients', device.get_dhcp_clients())
-        print('WlanStatus:', device.get_wlan_status())
-        print('WifiMoveStatus:', device.get_wifi_move_status())
-        print('WifiTimeControl:', device.get_wifi_time_control_enabled())
-        print('WifiTimeControlStatus:', device.get_wifi_time_control_status())
-        print('WifiClients:', device.get_wifi_clients())
-        print('GuestWlan_2gStatus:', device.get_guest_wlan_2g_status())
-        print('GuestWlan_5gStatus:', device.get_guest_wlan_5g_status())
-        print('PlcDeviceStatus:', device.get_plc_device_status())
-        print('PlcLocalSettings:', device.get_plc_local_settings())
-        print('MacFilterList:', device.get_mac_filters_list())
-        print('LedStatus:', device.get_led_status())
-        print('SystemLog', device.get_system_log())
-        print('SystemLogFilters', device.get_system_log_filters())
-    elif args.action == 'led-status':
-        led_status = device.get_led_status()
-        print('Led status:', 'on' if led_status else 'off')
-        exit_status = led_status
-    elif args.action == 'plc-info':
-        #print('PlcLocalSettings:', json.dumps(device.get_plc_local_settings(), indent=4))
-        plc_status = device.get_plc_device_status()
-        print(json.dumps({"data" : plc_status}, indent=4))
-        exit_status = True        
-    elif args.action == 'led-on':
-        device.led_switch(True)
-        exit_status = device.get_led_status()
-    elif args.action == 'led-off':
-        device.led_switch(False)
-        exit_status = not device.get_led_status()
-    elif args.action == 'reboot':
-        sys.exit(0 if device.reboot() else 1)
-    else:
-        device.logout()
-        raise argparse.ArgumentError(None, f'Unknown action {args.action}')
+        if args.action == 'show':
+            device.set_system_log_filters(
+                TL_WPA4220.LogType.ALL, TL_WPA4220.LogLevel.ALL)
 
-    device.logout()
+            print('FirmwareInfo:', device.get_firmware_info())
+            print('Region:', device.get_region())
+            print('Locale:', device.get_locale())
+            print('Locales:', device.get_locales())
+            print('Profile:', device.get_profile())
+            print('LanSettings', device.get_lan_settings())
+            print('DhcpSettings', device.get_dhcp_settings())
+            #print('DhcpClients', device.get_dhcp_clients())
+            print('WlanStatus:', device.get_wlan_status())
+            print('WifiMoveStatus:', device.get_wifi_move_status())
+            print('WifiTimeControl:', device.get_wifi_time_control_enabled())
+            print('WifiTimeControlStatus:', device.get_wifi_time_control_status())
+            print('WifiClients:', device.get_wifi_clients())
+            print('GuestWlan_2gStatus:', device.get_guest_wlan_2g_status())
+            print('GuestWlan_5gStatus:', device.get_guest_wlan_5g_status())
+            print('PlcDeviceStatus:', device.get_plc_device_status())
+            print('PlcLocalSettings:', device.get_plc_local_settings())
+            print('MacFilterList:', device.get_mac_filters_list())
+            print('LedStatus:', device.get_led_status())
+            print('SystemLog', device.get_system_log())
+            print('SystemLogFilters', device.get_system_log_filters())
+        elif args.action == 'led-status':
+            led_status = device.get_led_status()
+            print('Led status:', 'on' if led_status else 'off')
+            exit_status = led_status
+        elif args.action == 'plc-info':
+            #print('PlcLocalSettings:', json.dumps(device.get_plc_local_settings(), indent=4))
+            plc_status = device.get_plc_device_status()
+            print(json.dumps({"data" : plc_status}, indent=4))
+            exit_status = True
+        elif args.action == 'led-on':
+            device.led_switch(True)
+            exit_status = device.get_led_status()
+        elif args.action == 'led-off':
+            device.led_switch(False)
+            exit_status = not device.get_led_status()
+        elif args.action == 'reboot':
+            sys.exit(0 if device.reboot() else 1)
+        else:
+            raise argparse.ArgumentError(None, f'Unknown action {args.action}')
 
-    if not exit_status:
+        if not exit_status:
+            sys.exit(1)
+
+    except TL_WPA4220.TpError as e:
+        print_tp_error("Command failed", e)
         sys.exit(1)
+
+    finally:
+        try:
+            if device.logged_in():
+                device.logout()
+        except Exception:
+            pass
+

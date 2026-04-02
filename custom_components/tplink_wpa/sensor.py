@@ -25,6 +25,7 @@ SCAN_INTERVAL = timedelta(minutes=2)
 
 PLC_DEGRADED_THRESHOLD = 100  # Mbit/s
 
+
 # Global lock: the WPA8631P (and likely other models) only accept one active
 # session at a time. Without this, two configured devices logging in
 # simultaneously invalidate each other's session, causing empty responses
@@ -157,6 +158,19 @@ class TPLinkStatusSensor(SensorEntity):
                 wls_data["wireless_2g_pwd"] = f"hidden ({now_str})"
                 wls_data["wireless_5g_pwd"] = f"hidden ({now_str})"
 
+        except TL_WPA4220.TpError as e:
+            ignore_codes = {"decode-error", "empty-decrypted-response", "missing-data"}
+
+            if getattr(e, "error_code", None) in ignore_codes:
+                self._attributes["last_error"] = str(e)
+                _LOGGER.debug("Ignoring transient TP-Link error on %s: %s", self._ip, e)
+                return
+
+            self._state = "error"
+            self._attributes = {"error": str(e)}
+            _LOGGER.error("Error during data retrieval: %s", e)
+
+
         except Exception as e:
             self._state = "error"
             self._attributes = {"error": str(e)}
@@ -170,6 +184,7 @@ class TPLinkStatusSensor(SensorEntity):
             }
             self._state = "connected"
             self._attributes = status
+            self._attributes.pop("last_error", None)
             self._shared["status"] = status
 
             async_dispatcher_send(self._hass, SIGNAL_WPA4220_UPDATED.format(ip=self._ip))
@@ -683,4 +698,5 @@ class Wifi5EnabledBinary(_DerivedBinaryBase):
     def _compute_on(self, status):
         wls = status.get("WlanStatus") or {}
         self._is_on = str(wls.get("wireless_5g_enable", "")).lower() == "on"
+
 
