@@ -42,9 +42,11 @@ This code part has LGPL.
 ## Installation
 
 1. Create a folder in your Home Assistant config:  
-   `custom_components/tplink_wpa4220/`
+   `custom_components/tplink_wpa/`
 2. Copy the integration files into that folder.
 3. Restart Home Assistant.
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=woody6402&repository=TL-WPA8630P&category=integration)
 
 ---
 
@@ -63,7 +65,7 @@ The integration stores these as a config entry and will begin polling automatica
 ## Directory structure
 
 ```
-custom_components/technicolor_cga/
+custom_components/tplink_wpa/
 ├─ __init__.py
 ├─ config_flow.py
 ├─ manifest.json
