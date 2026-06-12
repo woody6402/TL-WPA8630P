@@ -128,102 +128,270 @@ class TPLinkStatusSensor(SensorEntity):
             "configuration_url": f"http://{self._ip}/",
         }
 
+    @callback
+    def _handle_push(self) -> None:
+        self.schedule_update_ha_state(True)
+
+    async def async_added_to_hass(self) -> None:
+        self._unsub = async_dispatcher_connect(
+            self.hass,
+            SIGNAL_WPA4220_UPDATED.format(ip=self._ip),
+            self._handle_push,
+        )
+        self.async_on_remove(self._unsub)
+
     async def async_update(self):
         async with _get_poll_lock():
             await self._do_update()
 
     async def _do_update(self):
         device = None
-        try:
-            device = TL_WPA4220(self._ip)
-            _LOGGER.debug("Logging in to the device... %s", self._ip)
-            await self._hass.async_add_executor_job(device.login, self._password)
 
-            # Sequential calls: TL_WPA4220 uses a single _seq counter incremented
-            # per request; parallel calls cause duplicate _seq and empty responses.
-            # Each request has a 10s timeout in TL_WPA4220; 60s total guard here.
-            async def _fetch_all():
-                f  = await self._hass.async_add_executor_job(device.get_firmware_info)
-                p  = await self._hass.async_add_executor_job(device.get_plc_device_status)
-                w  = await self._hass.async_add_executor_job(device.get_wlan_status)
-                wc = await self._hass.async_add_executor_job(device.get_wifi_clients)
-                return f, p, w, wc
+        rebooting = (
+            self._hass.data
+            .get(DOMAIN, {})
+            .get("rebooting", {})
+            .get(self._ip)
+        )
 
-            fw_data, plc_list, wls_data, wic_list = await asyncio.wait_for(
-                _fetch_all(), timeout=60
+        if rebooting:
+            now = datetime.now()
+
+            self._state = "rebooting"
+            self._attributes["rebooting"] = True
+            self._attributes["rebooting_since"] = (
+                rebooting["since"].isoformat()
             )
 
-            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            if now < rebooting["probe_after"]:
+                return
+
+        try:
+            device = TL_WPA4220(self._ip)
+
+            _LOGGER.debug(
+                "Logging in to the device... %s",
+                self._ip,
+            )
+
+            await self._hass.async_add_executor_job(
+                device.login,
+                self._password,
+            )
+
+            async def _fetch_all():
+                f = await self._hass.async_add_executor_job(
+                    device.get_firmware_info
+                )
+                p = await self._hass.async_add_executor_job(
+                    device.get_plc_device_status
+                )
+                w = await self._hass.async_add_executor_job(
+                    device.get_wlan_status
+                )
+                wc = await self._hass.async_add_executor_job(
+                    device.get_wifi_clients
+                )
+                return f, p, w, wc
+
+            fw_data, plc_list, wls_data, wic_list = (
+                await asyncio.wait_for(
+                    _fetch_all(),
+                    timeout=60,
+                )
+            )
+
+            now_str = datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
             if isinstance(wls_data, dict):
-                wls_data["wireless_2g_pwd"] = f"hidden ({now_str})"
-                wls_data["wireless_5g_pwd"] = f"hidden ({now_str})"
+                wls_data["wireless_2g_pwd"] = (
+                    f"hidden ({now_str})"
+                )
+                wls_data["wireless_5g_pwd"] = (
+                    f"hidden ({now_str})"
+                )
 
         except TL_WPA4220.TpError as e:
-            ignore_codes = {"decode-error", "empty-decrypted-response", "missing-data"}
+
+            if rebooting:
+                _LOGGER.debug(
+                    "Device %s still rebooting: %s",
+                    self._ip,
+                    e,
+                )
+                return
+
+            ignore_codes = {
+                "decode-error",
+                "empty-decrypted-response",
+                "missing-data",
+            }
 
             if getattr(e, "error_code", None) in ignore_codes:
                 self._attributes["last_error"] = str(e)
-                _LOGGER.debug("Ignoring transient TP-Link error on %s: %s", self._ip, e)
+
+                _LOGGER.debug(
+                    "Ignoring transient TP-Link error on %s: %s",
+                    self._ip,
+                    e,
+                )
                 return
 
             self._state = "error"
             self._attributes = {"error": str(e)}
-            _LOGGER.error("Error during data retrieval: %s", e)
 
+            _LOGGER.error(
+                "Error during data retrieval: %s",
+                e,
+            )
 
         except Exception as e:
+
+            if rebooting:
+                _LOGGER.debug(
+                    "Device %s still rebooting: %s",
+                    self._ip,
+                    e,
+                )
+                return
+
             self._state = "error"
             self._attributes = {"error": str(e)}
-            _LOGGER.error("Error during data retrieval: %s", e)
+
+            _LOGGER.error(
+                "Error during data retrieval: %s",
+                e,
+            )
+
         else:
+
+            if rebooting:
+                self._hass.data.get(
+                    DOMAIN,
+                    {},
+                ).get(
+                    "rebooting",
+                    {},
+                ).pop(
+                    self._ip,
+                    None,
+                )
+
             status = {
                 "FirmwareInfo": fw_data,
                 "WlanStatus": wls_data,
                 "WifiClients": wic_list,
                 "PlcDeviceStatus": plc_list,
             }
+
             self._state = "connected"
+
             self._attributes = status
-            self._attributes.pop("last_error", None)
+            self._attributes["rebooting"] = False
+
+            self._attributes.pop(
+                "last_error",
+                None,
+            )
+
             self._shared["status"] = status
 
-            async_dispatcher_send(self._hass, SIGNAL_WPA4220_UPDATED.format(ip=self._ip))
+            async_dispatcher_send(
+                self._hass,
+                SIGNAL_WPA4220_UPDATED.format(
+                    ip=self._ip
+                ),
+            )
 
-            # Device Registry Update (MACs & versions)
             try:
+
                 def _norm(mac):
                     if not mac:
                         return None
-                    return mac.strip().lower().replace("-", ":")
+                    return (
+                        mac.strip()
+                        .lower()
+                        .replace("-", ":")
+                    )
 
-                mac_24 = _norm((wls_data or {}).get("wireless_2g_macaddr"))
-                mac_5 = _norm((wls_data or {}).get("wireless_5g_macaddr"))
-                conn_set = {("mac", m) for m in (mac_24, mac_5) if m}
+                mac_24 = _norm(
+                    (wls_data or {}).get(
+                        "wireless_2g_macaddr"
+                    )
+                )
 
-                device_registry = dr.async_get(self._hass)
-                dev = device_registry.async_get_or_create(
-                    config_entry_id=self._config_entry.entry_id,
-                    identifiers={("tplink_wpa", self._ip)},
-                    manufacturer="TP-Link",
-                    name="TP-Link WPA",
-                    connections=conn_set if conn_set else None,
+                mac_5 = _norm(
+                    (wls_data or {}).get(
+                        "wireless_5g_macaddr"
+                    )
+                )
+
+                conn_set = {
+                    ("mac", m)
+                    for m in (mac_24, mac_5)
+                    if m
+                }
+
+                device_registry = dr.async_get(
+                    self._hass
+                )
+
+                dev = (
+                    device_registry.async_get_or_create(
+                        config_entry_id=self._config_entry.entry_id,
+                        identifiers={
+                            ("tplink_wpa", self._ip)
+                        },
+                        manufacturer="TP-Link",
+                        name="TP-Link WPA",
+                        connections=(
+                            conn_set
+                            if conn_set
+                            else None
+                        ),
+                    )
                 )
 
                 device_registry.async_update_device(
                     device_id=dev.id,
-                    model=(fw_data or {}).get("model") or "WPA",
-                    sw_version=(fw_data or {}).get("firmware_version"),
-                    hw_version=(fw_data or {}).get("hardware_version"),
+                    model=(
+                        (fw_data or {}).get("model")
+                        or "WPA"
+                    ),
+                    sw_version=(
+                        fw_data or {}
+                    ).get(
+                        "firmware_version"
+                    ),
+                    hw_version=(
+                        fw_data or {}
+                    ).get(
+                        "hardware_version"
+                    ),
                 )
+
             except Exception as reg_err:
-                _LOGGER.debug("Device registry update skipped/failed: %s", reg_err)
+                _LOGGER.debug(
+                    "Device registry update skipped/failed: %s",
+                    reg_err,
+                )
 
         finally:
             try:
                 if device:
-                    await self._hass.async_add_executor_job(device.logout)
+                    await self._hass.async_add_executor_job(
+                        device.logout
+                    )
             except Exception as logout_error:
-                _LOGGER.error("Logout error: %s", logout_error)
+                _LOGGER.error(
+                    "Logout error: %s",
+                    logout_error,
+                )
+
+
+
 
 
 class _DerivedBinaryBase(BinarySensorEntity):
