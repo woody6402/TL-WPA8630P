@@ -1,0 +1,10 @@
+reboot:
+  name: Reboot TP-Link WPA
+  description: Restart one or all configured TP-Link WPA powerline devices.
+  fields:
+    ip_address:
+      name: IP address
+      description: Optional IP address of the device to reboot. If omitted, all configured devices are rebooted.
+      example: 192.168.1.20
+      selector:
+        text:
