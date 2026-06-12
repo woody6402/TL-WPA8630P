@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import voluptuous as vol
 
@@ -16,6 +17,8 @@ SERVICE_REBOOT = "reboot"
 CONF_PASSWORD = "password"
 DATA_ENTRIES = "entries"
 DATA_SERVICE_REGISTERED = "service_registered"
+REBOOT_LOGIN_RETRIES = 3
+REBOOT_LOGIN_RETRY_DELAY = 2
 
 REBOOT_SERVICE_SCHEMA = vol.Schema(
     {
@@ -29,9 +32,43 @@ async def _async_reboot_device(hass: HomeAssistant, ip_address: str, password: s
     from .sensor import _get_poll_lock
 
     async with _get_poll_lock():
-        device = TL_WPA4220(ip_address)
-        await hass.async_add_executor_job(device.login, password)
-        return await hass.async_add_executor_job(device.reboot)
+        last_error: Exception | None = None
+
+        for attempt in range(1, REBOOT_LOGIN_RETRIES + 1):
+            device = TL_WPA4220(ip_address)
+            try:
+                await hass.async_add_executor_job(device.login, password)
+                return await hass.async_add_executor_job(device.reboot)
+            except TL_WPA4220.TpError as err:
+                last_error = err
+                error_code = getattr(err, "error_code", None)
+                if error_code != "timeout" or attempt >= REBOOT_LOGIN_RETRIES:
+                    raise
+
+                _LOGGER.warning(
+                    "TP-Link WPA reboot login timeout for %s, retrying (%s/%s)",
+                    ip_address,
+                    attempt,
+                    REBOOT_LOGIN_RETRIES,
+                )
+                await asyncio.sleep(REBOOT_LOGIN_RETRY_DELAY)
+            finally:
+                # Make sure a failed login attempt does not leave partial session data
+                # in the helper object.  If reboot() succeeded the object already resets
+                # its login data; this cleanup is only best-effort for failed attempts.
+                try:
+                    if device.logged_in():
+                        await hass.async_add_executor_job(device.logout)
+                except Exception as cleanup_error:
+                    _LOGGER.debug(
+                        "Ignoring TP-Link WPA cleanup error after reboot attempt for %s: %s",
+                        ip_address,
+                        cleanup_error,
+                    )
+
+        if last_error:
+            raise last_error
+        return False
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
