@@ -46,32 +46,32 @@ async def async_setup_entry(hass: HomeAssistant, config_entry, async_add_entitie
 
     shared = {"status": None, "top_n": int((config_entry.options or {}).get("top_n", 12))}
 
-    main = TPLinkStatusSensor(hass, "TP-Link WPA Status", ip, pwd, config_entry, shared)
+    main = TPLinkStatusSensor(hass, "status", ip, pwd, config_entry, shared)
 
     entities = [
         main,
-        WifiClientsTotalSensor(hass, "WLAN Clients (gesamt)", ip, config_entry, shared),
-        WifiClients24Sensor(hass, "WLAN Clients 2.4 GHz", ip, config_entry, shared),
-        WifiClients5Sensor(hass, "WLAN Clients 5 GHz", ip, config_entry, shared),
-        WifiClientsWithIpSensor(hass, "WLAN Clients mit IP", ip, config_entry, shared),
-        PlcPeersCountSensor(hass, "PLC Peers (Anzahl)", ip, config_entry, shared),
-        PlcMaxRxRateSensor(hass, "PLC Max RX (Mbit/s)", ip, config_entry, shared),
-        PlcMaxTxRateSensor(hass, "PLC Max TX (Mbit/s)", ip, config_entry, shared),
-        PlcMinRxRateSensor(hass, "PLC min RX (Mbit/s)", ip, config_entry, shared),
-        PlcMinTxRateSensor(hass, "PLC min TX (Mbit/s)", ip, config_entry, shared),
+        WifiClientsTotalSensor(hass, "wifi_clients_total", ip, config_entry, shared),
+        WifiClients24Sensor(hass, "wifi_clients_24", ip, config_entry, shared),
+        WifiClients5Sensor(hass, "wifi_clients_5", ip, config_entry, shared),
+        WifiClientsWithIpSensor(hass, "wifi_clients_with_ip", ip, config_entry, shared),
+        PlcPeersCountSensor(hass, "plc_peers", ip, config_entry, shared),
+        PlcMaxRxRateSensor(hass, "plc_max_rx", ip, config_entry, shared),
+        PlcMaxTxRateSensor(hass, "plc_max_tx", ip, config_entry, shared),
+        PlcMinRxRateSensor(hass, "plc_min_rx", ip, config_entry, shared),
+        PlcMinTxRateSensor(hass, "plc_min_tx", ip, config_entry, shared),
         PlcDegradedBinary(
             hass,
-            f"PLC unter {PLC_DEGRADED_THRESHOLD} Mbit/s?",
+            "plc_degraded",
             ip,
             config_entry,
             shared,
         ),
-        WifiSsid24Sensor(hass, "SSID 2.4 GHz", ip, config_entry, shared),
-        WifiSsid5Sensor(hass, "SSID 5 GHz", ip, config_entry, shared),
-        WifiChannel24Sensor(hass, "Kanal 2.4 GHz", ip, config_entry, shared),
-        WifiChannel5Sensor(hass, "Kanal 5 GHz", ip, config_entry, shared),
-        Wifi24EnabledBinary(hass, "WLAN 2.4 GHz aktiv", ip, config_entry, shared),
-        Wifi5EnabledBinary(hass, "WLAN 5 GHz aktiv", ip, config_entry, shared),
+        WifiSsid24Sensor(hass, "wifi_ssid_24", ip, config_entry, shared),
+        WifiSsid5Sensor(hass, "wifi_ssid_5", ip, config_entry, shared),
+        WifiChannel24Sensor(hass, "wifi_channel_24", ip, config_entry, shared),
+        WifiChannel5Sensor(hass, "wifi_channel_5", ip, config_entry, shared),
+        Wifi24EnabledBinary(hass, "wifi_24_enabled", ip, config_entry, shared),
+        Wifi5EnabledBinary(hass, "wifi_5_enabled", ip, config_entry, shared),
     ]
 
     async_add_entities(entities, update_before_add=True)
@@ -94,7 +94,8 @@ class TPLinkStatusSensor(SensorEntity):
 
     def __init__(self, hass, name, ip, password, config_entry, shared):
         self._ip = ip
-        self._name = name
+        self._attr_translation_key = name
+        self._attr_has_entity_name = True
         self._state = None
         self._attributes = {}
         self._hass = hass
@@ -102,9 +103,6 @@ class TPLinkStatusSensor(SensorEntity):
         self._config_entry = config_entry
         self._shared = shared
 
-    @property
-    def name(self):
-        return self._name
 
     @property
     def state(self):
@@ -399,16 +397,14 @@ class _DerivedBinaryBase(BinarySensorEntity):
 
     def __init__(self, hass, name, ip, config_entry, shared):
         self._hass = hass
-        self._name = name
+        self._attr_translation_key = name
+        self._attr_has_entity_name = True
         self._ip = ip
         self._config_entry = config_entry
         self._shared = shared
         self._is_on = None
         self._unsub = None
 
-    @property
-    def name(self):
-        return self._name
 
     @property
     def unique_id(self):
@@ -453,7 +449,8 @@ class _DerivedBase(SensorEntity):
 
     def __init__(self, hass, name, ip, config_entry, shared):
         self._hass = hass
-        self._name = name
+        self._attr_translation_key = name
+        self._attr_has_entity_name = True
         self._ip = ip
         self._config_entry = config_entry
         self._shared = shared
@@ -461,9 +458,6 @@ class _DerivedBase(SensorEntity):
         self._unsub = None
         self._attrs = {}
 
-    @property
-    def name(self):
-        return self._name
 
     @property
     def unique_id(self):
@@ -866,5 +860,4 @@ class Wifi5EnabledBinary(_DerivedBinaryBase):
     def _compute_on(self, status):
         wls = status.get("WlanStatus") or {}
         self._is_on = str(wls.get("wireless_5g_enable", "")).lower() == "on"
-
 
