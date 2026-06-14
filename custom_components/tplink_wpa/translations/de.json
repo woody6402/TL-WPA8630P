@@ -1,0 +1,109 @@
+{
+  "title": "TP-Link WPA Powerline",
+  "config": {
+    "step": {
+      "user": {
+        "title": "TP-Link WPA Powerline einrichten",
+        "description": "Gib die Verbindungsdaten für dein TP-Link-WPA-Powerline-Gerät ein.",
+        "data": {
+          "ip_address": "IP-Adresse",
+          "password": "Passwort"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung zum Gerät nicht möglich",
+      "unknown": "Unerwarteter Fehler"
+    },
+    "abort": {
+      "already_configured": "Dieses Gerät ist bereits eingerichtet"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "TP-Link WPA Optionen",
+        "description": "Verbindungsdaten und Anzeigeoptionen anpassen.",
+        "data": {
+          "ip_address": "IP-Adresse",
+          "password": "Passwort",
+          "top_n": "Anzahl der wichtigsten WLAN-Clients"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "name": "Status"
+      },
+      "wifi_clients_total": {
+        "name": "WLAN-Clients gesamt"
+      },
+      "wifi_clients_24": {
+        "name": "WLAN-Clients 2,4 GHz"
+      },
+      "wifi_clients_5": {
+        "name": "WLAN-Clients 5 GHz"
+      },
+      "wifi_clients_with_ip": {
+        "name": "WLAN-Clients mit IP"
+      },
+      "plc_peers": {
+        "name": "PLC-Peers"
+      },
+      "plc_max_rx": {
+        "name": "PLC Max RX"
+      },
+      "plc_max_tx": {
+        "name": "PLC Max TX"
+      },
+      "plc_min_rx": {
+        "name": "PLC Min RX"
+      },
+      "plc_min_tx": {
+        "name": "PLC Min TX"
+      },
+      "wifi_ssid_24": {
+        "name": "SSID 2,4 GHz"
+      },
+      "wifi_ssid_5": {
+        "name": "SSID 5 GHz"
+      },
+      "wifi_channel_24": {
+        "name": "Kanal 2,4 GHz"
+      },
+      "wifi_channel_5": {
+        "name": "Kanal 5 GHz"
+      }
+    },
+    "binary_sensor": {
+      "plc_degraded": {
+        "name": "PLC unter 100 Mbit/s"
+      },
+      "wifi_24_enabled": {
+        "name": "WLAN 2,4 GHz aktiv"
+      },
+      "wifi_5_enabled": {
+        "name": "WLAN 5 GHz aktiv"
+      }
+    },
+    "button": {
+      "reboot": {
+        "name": "Neustart"
+      }
+    }
+  },
+  "services": {
+    "reboot": {
+      "name": "TP-Link WPA neu starten",
+      "description": "Startet ein oder alle eingerichteten TP-Link-WPA-Powerline-Geräte neu.",
+      "fields": {
+        "ip_address": {
+          "name": "IP-Adresse",
+          "description": "Optionale IP-Adresse des Geräts, das neu gestartet werden soll. Ohne Angabe werden alle eingerichteten Geräte neu gestartet."
+        }
+      }
+    }
+  }
+}
