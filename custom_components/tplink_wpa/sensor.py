@@ -94,7 +94,7 @@ class TPLinkStatusSensor(SensorEntity):
 
     def __init__(self, hass, name, ip, password, config_entry, shared):
         self._ip = ip
-        self._attr_translation_key = name
+        self._attr_translation_key = translation_key
         self._attr_has_entity_name = True
         self._state = None
         self._attributes = {}
