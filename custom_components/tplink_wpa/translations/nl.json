@@ -1,0 +1,109 @@
+{
+  "title": "TP-Link WPA Powerline",
+  "config": {
+    "step": {
+      "user": {
+        "title": "TP-Link WPA Powerline instellen",
+        "description": "Voer de verbindingsgegevens van uw TP-Link WPA powerline-apparaat in.",
+        "data": {
+          "ip_address": "IP-adres",
+          "password": "Wachtwoord"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Kan geen verbinding maken met het apparaat",
+      "unknown": "Onverwachte fout"
+    },
+    "abort": {
+      "already_configured": "Dit apparaat is al geconfigureerd"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "TP-Link WPA opties",
+        "description": "Pas verbindingsgegevens en weergaveopties aan.",
+        "data": {
+          "ip_address": "IP-adres",
+          "password": "Wachtwoord",
+          "top_n": "Aantal belangrijkste Wi-Fi-clients"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "name": "Status"
+      },
+      "wifi_clients_total": {
+        "name": "Totaal aantal Wi-Fi-clients"
+      },
+      "wifi_clients_24": {
+        "name": "Wi-Fi-clients 2,4 GHz"
+      },
+      "wifi_clients_5": {
+        "name": "Wi-Fi-clients 5 GHz"
+      },
+      "wifi_clients_with_ip": {
+        "name": "Wi-Fi-clients met IP-adres"
+      },
+      "plc_peers": {
+        "name": "PLC-peers"
+      },
+      "plc_max_rx": {
+        "name": "PLC max. RX"
+      },
+      "plc_max_tx": {
+        "name": "PLC max. TX"
+      },
+      "plc_min_rx": {
+        "name": "PLC min. RX"
+      },
+      "plc_min_tx": {
+        "name": "PLC min. TX"
+      },
+      "wifi_ssid_24": {
+        "name": "SSID 2,4 GHz"
+      },
+      "wifi_ssid_5": {
+        "name": "SSID 5 GHz"
+      },
+      "wifi_channel_24": {
+        "name": "Kanaal 2,4 GHz"
+      },
+      "wifi_channel_5": {
+        "name": "Kanaal 5 GHz"
+      }
+    },
+    "binary_sensor": {
+      "plc_degraded": {
+        "name": "PLC onder 100 Mbit/s"
+      },
+      "wifi_24_enabled": {
+        "name": "Wi-Fi 2,4 GHz ingeschakeld"
+      },
+      "wifi_5_enabled": {
+        "name": "Wi-Fi 5 GHz ingeschakeld"
+      }
+    },
+    "button": {
+      "reboot": {
+        "name": "Herstarten"
+      }
+    }
+  },
+  "services": {
+    "reboot": {
+      "name": "TP-Link WPA herstarten",
+      "description": "Herstart één of alle geconfigureerde TP-Link WPA powerline-apparaten.",
+      "fields": {
+        "ip_address": {
+          "name": "IP-adres",
+          "description": "Optioneel IP-adres van het te herstarten apparaat. Indien weggelaten, worden alle geconfigureerde apparaten herstart."
+        }
+      }
+    }
+  }
+}
