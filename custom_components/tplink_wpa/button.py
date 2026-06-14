@@ -33,6 +33,8 @@ class TPLinkWPARebootButton(ButtonEntity):
 
     _attr_device_class = ButtonDeviceClass.RESTART
     _attr_icon = "mdi:restart"
+    _attr_has_entity_name = True
+    _attr_translation_key = "reboot"
 
     def __init__(
         self,
@@ -45,7 +47,6 @@ class TPLinkWPARebootButton(ButtonEntity):
         self._config_entry = config_entry
         self._ip_address = ip_address
         self._password = password
-        self._attr_name = "TP-Link WPA Neustart"
         self._attr_unique_id = f"{config_entry.entry_id}_{ip_address}_reboot"
 
     @property
