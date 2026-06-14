@@ -75,7 +75,16 @@
       },
       "wifi_channel_5": {
         "name": "Channel 5 GHz"
-      }
+      },
+      "plc_degraded": {
+        "name": "PLC below 100 Mbit/s"
+      },
+      "wifi_24_enabled": {
+        "name": "Wi-Fi 2.4 GHz enabled"
+      },
+      "wifi_5_enabled": {
+        "name": "Wi-Fi 5 GHz enabled"
+      }      
     },
     "binary_sensor": {
       "plc_degraded": {
