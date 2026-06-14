@@ -92,7 +92,7 @@ class TPLinkStatusSensor(SensorEntity):
     _attr_should_poll = True
     _attr_icon = "mdi:access-point"
 
-    def __init__(self, hass, name, ip, password, config_entry, shared):
+    def __init__(self, hass, translation_key, ip, password, config_entry, shared):
         self._ip = ip
         self._attr_translation_key = translation_key
         self._attr_has_entity_name = True
