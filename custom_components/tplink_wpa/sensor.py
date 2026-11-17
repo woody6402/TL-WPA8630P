@@ -379,7 +379,7 @@ class TPLinkStatusSensor(SensorEntity):
 
         finally:
             try:
-                if device:
+                if device and device.logged_in():
                     await self._hass.async_add_executor_job(
                         device.logout
                     )

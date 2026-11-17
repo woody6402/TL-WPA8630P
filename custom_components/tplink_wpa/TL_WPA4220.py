@@ -120,14 +120,18 @@ class TL_WPA4220(object):
 
     def logout(self):
         self._require_login()
-        # not skipping logout since manual logon to the device web maybe blocked 
+        # Do not skip logout: an active browser session may otherwise remain
+        # blocked.  Always clear the local session, even if this firmware does
+        # not answer the logout request as expected.
         old_timeout = self._timeout
-        self._timeout = 2.0 # Do not block in this case...
-        self._encrypted_req('admin/logout.htm', self.Op.WRITE, extra_headers={
-            'Cookie': 'Authorization=;path=/'
-        })
-        self._timeout = old_timeout
-        self._unset_login_data()
+        self._timeout = 2.0
+        try:
+            self._encrypted_req('admin/logout.htm', self.Op.WRITE, extra_headers={
+                'Cookie': 'Authorization=;path=/'
+            })
+        finally:
+            self._timeout = old_timeout
+            self._unset_login_data()
 
 
     def reboot(self):
@@ -457,12 +461,49 @@ class TL_WPA4220(object):
 
         try:
             resp_json = r.json()
+
+            if not isinstance(resp_json, dict):
+                raise TL_WPA4220.TpError(
+                    f"Unexpected outer JSON type: {type(resp_json).__name__}",
+                    "invalid-outer-response",
+                )
+
+            # Some firmware versions return an unencrypted error envelope
+            # instead of a Base64 encrypted value in ``data``.
+            if resp_json.get("success") is False:
+                error_code = (
+                    resp_json.get("errorcode")
+                    or resp_json.get("errCode")
+                )
+                raise TL_WPA4220.TpError(
+                    f"Device returned unsuccessful response: {resp_json!r}",
+                    error_code,
+                )
+
             encrypted_resp = resp_json.get("data")
+
+            if isinstance(encrypted_resp, dict):
+                error_code = (
+                    encrypted_resp.get("errorcode")
+                    or encrypted_resp.get("errCode")
+                )
+                raise TL_WPA4220.TpError(
+                    "Device returned unencrypted response data: "
+                    f"{encrypted_resp!r}",
+                    error_code or "invalid-encrypted-data",
+                )
 
             if not encrypted_resp:
                 raise TL_WPA4220.TpError(
                     f"No encrypted data in response: {resp_json!r}",
                     "missing-data",
+                )
+
+            if not isinstance(encrypted_resp, (str, bytes)):
+                raise TL_WPA4220.TpError(
+                    "Unexpected encrypted data type: "
+                    f"{type(encrypted_resp).__name__}",
+                    "invalid-encrypted-data",
                 )
 
             response = self._aes_decrypt(encrypted_resp)
