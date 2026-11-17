@@ -16,6 +16,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
 
 from .const import DOMAIN
+from .device import create_device
 from .TL_WPA4220 import TL_WPA4220
 
 _LOGGER = logging.getLogger(__name__)
@@ -165,7 +166,7 @@ class TPLinkStatusSensor(SensorEntity):
                 return
 
         try:
-            device = TL_WPA4220(self._ip)
+            device = create_device(self._ip)
 
             _LOGGER.debug(
                 "Logging in to the device... %s",

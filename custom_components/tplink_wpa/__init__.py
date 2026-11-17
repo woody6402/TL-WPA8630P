@@ -11,6 +11,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .const import DOMAIN
+from .device import create_device
 from .TL_WPA4220 import TL_WPA4220
 
 _LOGGER = logging.getLogger(__name__)
@@ -71,7 +72,7 @@ async def _async_reboot_device(
         last_error = None
 
         for attempt in range(1, REBOOT_LOGIN_RETRIES + 1):
-            device = TL_WPA4220(ip_address)
+            device = create_device(ip_address)
 
             try:
                 await hass.async_add_executor_job(
