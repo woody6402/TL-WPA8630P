@@ -535,6 +535,14 @@ class TL_WPA4220(object):
                 error_code,
             )
 
+        except TL_WPA4220.TpError as e:
+            # Keep the endpoint in normal error-level logs. This makes it
+            # possible to diagnose firmware-specific failures without
+            # enabling the low-level client debug logs, which contain
+            # sensitive cryptographic session material.
+            raise TL_WPA4220.TpError(
+                f"Request {path} failed: {e}", e.error_code
+            ) from e
         except (json.JSONDecodeError, JSONDecodeError, requests.exceptions.JSONDecodeError) as e:
             if response and response.strip():
                 payload = response[:300]

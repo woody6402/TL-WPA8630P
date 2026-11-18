@@ -177,17 +177,22 @@ class TPLinkStatusSensor(SensorEntity):
                 device.login,
                 self._password,
             )
+            _LOGGER.debug("Login succeeded for TP-Link device %s", self._ip)
 
             async def _fetch_all():
+                _LOGGER.debug("Fetching firmware info from TP-Link device %s", self._ip)
                 f = await self._hass.async_add_executor_job(
                     device.get_firmware_info
                 )
+                _LOGGER.debug("Fetching PLC status from TP-Link device %s", self._ip)
                 p = await self._hass.async_add_executor_job(
                     device.get_plc_device_status
                 )
+                _LOGGER.debug("Fetching WLAN status from TP-Link device %s", self._ip)
                 w = await self._hass.async_add_executor_job(
                     device.get_wlan_status
                 )
+                _LOGGER.debug("Fetching Wi-Fi clients from TP-Link device %s", self._ip)
                 wc = await self._hass.async_add_executor_job(
                     device.get_wifi_clients
                 )
@@ -380,6 +385,7 @@ class TPLinkStatusSensor(SensorEntity):
         finally:
             try:
                 if device and device.logged_in():
+                    _LOGGER.debug("Logging out from TP-Link device %s", self._ip)
                     await self._hass.async_add_executor_job(
                         device.logout
                     )
