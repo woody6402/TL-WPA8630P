@@ -127,20 +127,10 @@ class TPLinkStatusSensor(SensorEntity):
             "configuration_url": f"http://{self._ip}/",
         }
 
-    @callback
-    def _handle_push(self) -> None:
-        self.schedule_update_ha_state(True)
-
-    async def async_added_to_hass(self) -> None:
-        self._unsub = async_dispatcher_connect(
-            self.hass,
-            SIGNAL_WPA4220_UPDATED.format(ip=self._ip),
-            self._handle_push,
-        )
-        self.async_on_remove(self._unsub)
-
     async def async_update(self):
+        _LOGGER.debug("Polling TP-Link device %s", self._ip)
         async with _get_poll_lock():
+            _LOGGER.debug("Poll lock acquired for TP-Link device %s", self._ip)
             await self._do_update()
 
     async def _do_update(self):
@@ -184,10 +174,25 @@ class TPLinkStatusSensor(SensorEntity):
                 f = await self._hass.async_add_executor_job(
                     device.get_firmware_info
                 )
+
+                plc_error = None
                 _LOGGER.debug("Fetching PLC status from TP-Link device %s", self._ip)
-                p = await self._hass.async_add_executor_job(
-                    device.get_plc_device_status
-                )
+                try:
+                    p = await self._hass.async_add_executor_job(
+                        device.get_plc_device_status
+                    )
+                except TL_WPA4220.TpError as err:
+                    # Some firmware versions intermittently reject this
+                    # endpoint while the rest of the device API still works.
+                    # Do not lose firmware and WLAN status because of it.
+                    p = None
+                    plc_error = str(err)
+                    _LOGGER.warning(
+                        "PLC status unavailable on TP-Link device %s: %s",
+                        self._ip,
+                        err,
+                    )
+
                 _LOGGER.debug("Fetching WLAN status from TP-Link device %s", self._ip)
                 w = await self._hass.async_add_executor_job(
                     device.get_wlan_status
@@ -196,9 +201,9 @@ class TPLinkStatusSensor(SensorEntity):
                 wc = await self._hass.async_add_executor_job(
                     device.get_wifi_clients
                 )
-                return f, p, w, wc
+                return f, p, w, wc, plc_error
 
-            fw_data, plc_list, wls_data, wic_list = (
+            fw_data, plc_list, wls_data, wic_list, plc_error = (
                 await asyncio.wait_for(
                     _fetch_all(),
                     timeout=60,
@@ -289,6 +294,8 @@ class TPLinkStatusSensor(SensorEntity):
                 "WifiClients": wic_list,
                 "PlcDeviceStatus": plc_list,
             }
+            if plc_error:
+                status["PlcDeviceStatusError"] = plc_error
 
             self._state = "connected"
 
@@ -684,7 +691,13 @@ class PlcPeersCountSensor(_DerivedBase):
         return "mdi:power-plug"
 
     def _compute_state(self, status):
-        plc_items = self._as_list(status.get("PlcDeviceStatus"))
+        plc = status.get("PlcDeviceStatus")
+        if plc is None:
+            self._state = None
+            self._attrs.pop("plc_peers_macs", None)
+            return
+
+        plc_items = self._as_list(plc)
         macs = (self._norm_mac((d or {}).get("device_mac")) for d in plc_items)
         self._count_set_attr("plc_peers_macs", macs)
 
@@ -792,6 +805,10 @@ class PlcDegradedBinary(_DerivedBinaryBase):
 
     def _compute_on(self, status):
         plc = status.get("PlcDeviceStatus")
+        if plc is None:
+            self._is_on = None
+            return
+
         plc = [plc] if isinstance(plc, dict) else (plc if isinstance(plc, list) else [])
         worst = None
         for d in plc:
