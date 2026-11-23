@@ -40,6 +40,19 @@ REBOOT_SERVICE_SCHEMA = vol.Schema(
     }
 )
 
+
+async def _async_entry_updated(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+) -> None:
+    """Reload the entry after options or system settings change.
+
+    In particular, Home Assistant creates or removes the entity-platform
+    polling timer while setting up the platform. Reloading is therefore
+    required for a changed polling preference to take effect.
+    """
+    await hass.config_entries.async_reload(entry.entry_id)
+
 def _mark_rebooting(hass: HomeAssistant, ip_address: str) -> None:
     from datetime import datetime, timedelta
     from homeassistant.helpers.dispatcher import async_dispatcher_send
@@ -138,6 +151,10 @@ async def async_setup_entry(
     hass.data[DOMAIN].setdefault(DATA_REBOOTING_UNTIL, {})
 
     hass.data[DOMAIN][DATA_ENTRIES][entry.entry_id] = entry
+
+    entry.async_on_unload(
+        entry.add_update_listener(_async_entry_updated)
+    )
 
     if not hass.data[DOMAIN].get(DATA_SERVICE_REGISTERED):
 

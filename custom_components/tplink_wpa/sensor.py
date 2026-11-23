@@ -77,16 +77,6 @@ async def async_setup_entry(hass: HomeAssistant, config_entry, async_add_entitie
 
     async_add_entities(entities, update_before_add=True)
 
-    # ---- Options wirken SOFORT: update listener ----
-    @callback
-    def _options_updated(_hass: HomeAssistant, entry) -> None:
-        shared["top_n"] = int((entry.options or {}).get("top_n", 12))
-        # Derived Entities sofort neu rechnen lassen (auch ohne 2-min Status refresh)
-        async_dispatcher_send(hass, SIGNAL_WPA4220_UPDATED.format(ip=ip))
-
-    config_entry.async_on_unload(config_entry.add_update_listener(_options_updated))
-
-
 class TPLinkStatusSensor(SensorEntity):
     """Sensor to retrieve the full status of the device."""
 
@@ -396,9 +386,23 @@ class TPLinkStatusSensor(SensorEntity):
                     await self._hass.async_add_executor_job(
                         device.logout
                     )
+            except TL_WPA4220.TpError as logout_error:
+                if logout_error.error_code == "decode-error":
+                    _LOGGER.debug(
+                        "TP-Link device %s returned no valid response to logout; "
+                        "local session was cleared",
+                        self._ip,
+                    )
+                else:
+                    _LOGGER.warning(
+                        "Logout error for TP-Link device %s: %s",
+                        self._ip,
+                        logout_error,
+                    )
             except Exception as logout_error:
-                _LOGGER.error(
-                    "Logout error: %s",
+                _LOGGER.warning(
+                    "Logout error for TP-Link device %s: %s",
+                    self._ip,
                     logout_error,
                 )
 
